@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"d:\\\\Projects\\\\edge Monitoring\\\\apps\\\\api\"\" 2>/dev/null || dir \"d:Projectsedge Monitoringappsapi\"\")",
+      "Bash(dir:*)",
+      "Bash(copy \"d:\\\\Projects\\\\edge Monitoring\\\\apps\\\\api\\\\prisma\\\\dev.db\" \"d:\\\\Projects\\\\edge Monitoring\\\\data\\\\edge-monitoring.db\")",
+      "Bash(test:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:*)",
+      "Bash(timeout 5 node:*)",
+      "Bash(docker compose build:*)",
+      "Bash(docker compose up:*)",
+      "Bash(docker compose:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}

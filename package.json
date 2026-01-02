@@ -1,0 +1,20 @@
+{
+  "name": "edge-monitoring",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @edge-monitoring/api",
+    "dev:api": "npm run dev -w @edge-monitoring/api",
+    "dev:web": "npm run dev -w @edge-monitoring/web",
+    "dev:agent": "npm run dev -w @edge-monitoring/agent",
+    "build": "npm run build -ws",
+    "typecheck": "npm run typecheck -ws",
+    "lint": "npm run lint -ws",
+    "format": "npm run format -ws"
+  },
+  "engines": {
+    "node": ">=20.11"
+  }
+}

@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+
+# Persisted runtime data
+data/
+
+# Database files (kept in data/ folder which is persisted)
+*.db
+*.db-journal
+!data/.gitkeep
+
+*.log
+
+# Windows-reserved filename accidentally present in workspace
+NUL

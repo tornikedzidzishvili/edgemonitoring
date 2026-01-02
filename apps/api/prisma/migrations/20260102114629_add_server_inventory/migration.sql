@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "Server" ADD COLUMN "ip" TEXT;
+ALTER TABLE "Server" ADD COLUMN "specs" JSONB;
+ALTER TABLE "Server" ADD COLUMN "sshPort" INTEGER;
+ALTER TABLE "Server" ADD COLUMN "sshUser" TEXT;
+ALTER TABLE "Server" ADD COLUMN "vendor" TEXT;

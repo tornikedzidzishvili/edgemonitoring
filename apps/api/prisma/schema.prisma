@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Server {
+  id           String   @id @default(cuid())
+  name         String
+  ip           String?
+  vendor       String?
+  specs        Json?
+  sshUser      String?
+  sshPort      Int?
+  sshKeyId     String?
+  sshKey       SshKey?  @relation(fields: [sshKeyId], references: [id])
+  apiKeyHash   String?
+  createdAt    DateTime @default(now())
+  lastSeenAt   DateTime?
+  webApps      WebApp[]
+  reports      ServerReport[]
+}
+
+model SshKey {
+  id             String   @id @default(cuid())
+  name           String
+  username       String?
+  port           Int?
+  privateKeyEnc  String
+  privateKeyIv   String
+  privateKeyTag  String
+  passphraseEnc  String?
+  passphraseIv   String?
+  passphraseTag  String?
+  createdAt      DateTime @default(now())
+  servers        Server[]
+}
+
+model WebApp {
+  id          String             @id @default(cuid())
+  name        String
+  url         String
+  enabled     Boolean            @default(true)
+  serverId    String?
+  server      Server?            @relation(fields: [serverId], references: [id])
+  createdAt   DateTime           @default(now())
+  checks      UptimeCheckResult[]
+}
+
+model UptimeCheckResult {
+  id             String   @id @default(cuid())
+  webAppId       String
+  webApp         WebApp   @relation(fields: [webAppId], references: [id])
+  checkedAt      DateTime @default(now())
+  ok             Boolean
+  httpStatus     Int?
+  responseTimeMs Int?
+  error          String?
+
+  @@index([webAppId, checkedAt])
+}
+
+model ServerReport {
+  id         String   @id @default(cuid())
+  serverId   String
+  server     Server   @relation(fields: [serverId], references: [id])
+  reportedAt DateTime @default(now())
+  payload    Json
+
+  @@index([serverId, reportedAt])
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String
+  position     String?
+  role         String    @default("user") // "admin" or "user"
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+}
+
+model SmtpSettings {
+  id        String   @id @default(cuid())
+  host      String
+  port      Int
+  secure    Boolean  @default(true)
+  username  String?
+  password  String?  // encrypted
+  fromEmail String
+  fromName  String?
+  updatedAt DateTime @updatedAt
+}
