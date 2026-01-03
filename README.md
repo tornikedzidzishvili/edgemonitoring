@@ -130,11 +130,14 @@ In your GitHub repo: Settings → Secrets and variables → Actions, add:
 - `PROD_HOST` = `46.224.152.2`
 - `PROD_USER` = `edge`
 - `PROD_SSH_PRIVATE_KEY` = *a deploy key private key* (recommended: create a separate key, do **not** reuse your personal key)
+- `PROD_SSH_PASSPHRASE` = deploy key passphrase (if your deploy key is encrypted)
 - `PROD_SSH_PORT` = `22` (optional)
 - `PROD_APP_DIR` = `/opt/edge-monitoring` (optional)
 - `PROD_REPO_URL` = `https://github.com/tornikedzidzishvili/edgemonitoring.git` (optional)
 - `SSH_KEY_MASTER_SECRET` = your production encryption secret (required)
 - `CERTBOT_EMAIL` = email for Let's Encrypt (recommended)
+
+Note: this repo is private; the workflow uploads the code to the server over SSH and does not require the server to `git clone` from GitHub.
 
 ### 2) Install the deploy public key on the server
 Append the deploy key public key to:

@@ -16,6 +16,7 @@ set -eu
 
 REPO_URL="${REPO_URL:-https://github.com/tornikedzidzishvili/edgemonitoring.git}"
 APP_DIR="${APP_DIR:-/opt/edge-monitoring}"
+SKIP_GIT="${SKIP_GIT:-0}"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "ERROR: docker not found" >&2
@@ -34,13 +35,21 @@ fi
 
 mkdir -p "$APP_DIR"
 
-if [ ! -d "$APP_DIR/.git" ]; then
-  echo "[1/5] Cloning repo"
-  git clone "$REPO_URL" "$APP_DIR"
+if [ "$SKIP_GIT" = "1" ]; then
+  echo "[1/5] Using existing files (SKIP_GIT=1)"
+  if [ ! -f "$APP_DIR/docker-compose.prod.yml" ]; then
+    echo "ERROR: missing $APP_DIR/docker-compose.prod.yml" >&2
+    exit 1
+  fi
 else
-  echo "[1/5] Updating repo"
-  git -C "$APP_DIR" fetch --all --prune
-  git -C "$APP_DIR" reset --hard origin/main
+  if [ ! -d "$APP_DIR/.git" ]; then
+    echo "[1/5] Cloning repo"
+    git clone "$REPO_URL" "$APP_DIR"
+  else
+    echo "[1/5] Updating repo"
+    git -C "$APP_DIR" fetch --all --prune
+    git -C "$APP_DIR" reset --hard origin/main
+  fi
 fi
 
 echo "[2/5] Writing production env file (not committed)"
