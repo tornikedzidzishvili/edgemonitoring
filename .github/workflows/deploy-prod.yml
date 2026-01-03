@@ -1,0 +1,53 @@
+name: Deploy (prod)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            set -eu
+
+            APP_DIR="${{ secrets.PROD_APP_DIR }}"
+            REPO_URL="${{ secrets.PROD_REPO_URL }}"
+
+            if [ -z "$APP_DIR" ]; then APP_DIR=/opt/edge-monitoring; fi
+            if [ -z "$REPO_URL" ]; then REPO_URL="https://github.com/tornikedzidzishvili/edgemonitoring.git"; fi
+
+            mkdir -p "$APP_DIR"
+
+            # Ensure repo exists
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone "$REPO_URL" "$APP_DIR"
+            fi
+
+            # Ensure latest main
+            git -C "$APP_DIR" fetch --all --prune
+            git -C "$APP_DIR" checkout -f main
+            git -C "$APP_DIR" reset --hard origin/main
+
+            # Ensure scripts are executable
+            chmod +x "$APP_DIR/scripts/deploy-prod.sh" || true
+
+            # Deploy
+            export SSH_KEY_MASTER_SECRET='${{ secrets.SSH_KEY_MASTER_SECRET }}'
+            export CERTBOT_EMAIL='${{ secrets.CERTBOT_EMAIL }}'
+            export APP_DIR
+            export REPO_URL
+
+            "$APP_DIR/scripts/deploy-prod.sh"

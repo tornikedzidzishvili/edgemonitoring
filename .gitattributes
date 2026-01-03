@@ -1,0 +1,5 @@
+# Enforce LF for shell scripts (Linux containers/servers)
+*.sh text eol=lf
+
+# Keep CRLF for PowerShell scripts on Windows
+*.ps1 text eol=crlf
