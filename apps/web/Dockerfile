@@ -6,6 +6,7 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 COPY package.json package-lock.json* tsconfig.base.json ./
 COPY apps/api/package.json ./apps/api/package.json
+COPY apps/api/prisma ./apps/api/prisma
 COPY apps/web/package.json ./apps/web/package.json
 COPY apps/agent/package.json ./apps/agent/package.json
 RUN npm ci
