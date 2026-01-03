@@ -16,6 +16,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Ensure app directory exists
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PROD_SSH_PASSPHRASE }}
+          script_stop: true
+          script: |
+            set -eu
+            APP_DIR="${{ secrets.PROD_APP_DIR }}"
+            if [ -z "$APP_DIR" ]; then APP_DIR=/opt/edge-monitoring; fi
+            mkdir -p "$APP_DIR"
+
       # Repo is private; instead of cloning on the server, upload the code over SSH.
       - name: Upload to server
         uses: appleboy/scp-action@v0.1.7
