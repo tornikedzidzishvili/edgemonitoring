@@ -3,6 +3,11 @@ set -eu
 
 DOMAIN="monitoring.edge.ge"
 EMAIL="${CERTBOT_EMAIL:-}"
+APP_DIR="${APP_DIR:-$(pwd)}"
+
+dc() {
+  docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.prod.yml" "$@"
+}
 
 if [ -z "$EMAIL" ]; then
   echo "ERROR: set CERTBOT_EMAIL (used by Let's Encrypt)" >&2
@@ -11,10 +16,20 @@ if [ -z "$EMAIL" ]; then
 fi
 
 echo "[1/3] Starting production stack (HTTP only)"
-docker compose -f docker-compose.prod.yml up -d --build api web proxy
+if [ -f "$APP_DIR/.env" ]; then
+  if grep -q '^PROXY_CONF=' "$APP_DIR/.env"; then
+    sed -i "s|^PROXY_CONF=.*$|PROXY_CONF=./infra/proxy/nginx.http.conf|" "$APP_DIR/.env"
+  else
+    printf '\nPROXY_CONF=./infra/proxy/nginx.http.conf\n' >>"$APP_DIR/.env"
+  fi
+else
+  printf 'PROXY_CONF=./infra/proxy/nginx.http.conf\n' >"$APP_DIR/.env"
+fi
+
+dc up -d --build api web proxy
 
 echo "[2/3] Requesting Let's Encrypt certificate for $DOMAIN"
-docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+dc run --rm certbot certonly \
   --webroot -w /var/www/certbot \
   -d "$DOMAIN" \
   --email "$EMAIL" \
@@ -22,5 +37,10 @@ docker compose -f docker-compose.prod.yml run --rm certbot certonly \
   --no-eff-email
 
 echo "[3/3] Enable HTTPS config"
-echo "- Edit docker-compose.prod.yml to mount infra/proxy/nginx.https.conf instead of infra/proxy/nginx.http.conf"
-echo "- Then run: docker compose -f docker-compose.prod.yml up -d --no-deps proxy"
+if grep -q '^PROXY_CONF=' "$APP_DIR/.env"; then
+  sed -i "s|^PROXY_CONF=.*$|PROXY_CONF=./infra/proxy/nginx.https.conf|" "$APP_DIR/.env"
+else
+  printf '\nPROXY_CONF=./infra/proxy/nginx.https.conf\n' >>"$APP_DIR/.env"
+fi
+dc up -d --no-deps proxy
+dc exec -T proxy nginx -s reload || true

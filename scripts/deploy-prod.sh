@@ -18,6 +18,10 @@ REPO_URL="${REPO_URL:-https://github.com/tornikedzidzishvili/edgemonitoring.git}
 APP_DIR="${APP_DIR:-/opt/edge-monitoring}"
 SKIP_GIT="${SKIP_GIT:-0}"
 
+dc() {
+  docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.prod.yml" "$@"
+}
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "ERROR: docker not found" >&2
   exit 1
@@ -56,19 +60,20 @@ echo "[2/5] Writing production env file (not committed)"
 # docker compose automatically reads .env in the working directory
 cat >"$APP_DIR/.env" <<EOF
 SSH_KEY_MASTER_SECRET=$SSH_KEY_MASTER_SECRET
+PROXY_CONF=./infra/proxy/nginx.http.conf
 EOF
 
 echo "[3/5] Building and starting stack (HTTP proxy initially)"
 # Use --no-cache when FORCE_REBUILD=1 to bust Docker cache
 if [ "${FORCE_REBUILD:-0}" = "1" ]; then
   echo "FORCE_REBUILD=1: building without cache"
-  docker compose -f "$APP_DIR/docker-compose.prod.yml" build --no-cache api web
+  dc build --no-cache api web
 fi
-docker compose -f "$APP_DIR/docker-compose.prod.yml" up -d --build api web proxy
+dc up -d --build api web proxy
 
 if [ -n "${CERTBOT_EMAIL:-}" ]; then
   echo "[4/5] Requesting/renewing Let's Encrypt certificate"
-  docker compose -f "$APP_DIR/docker-compose.prod.yml" run --rm certbot certonly \
+  dc run --rm certbot certonly \
     --webroot -w /var/www/certbot \
     -d monitoring.edge.ge \
     --email "$CERTBOT_EMAIL" \
@@ -77,21 +82,26 @@ if [ -n "${CERTBOT_EMAIL:-}" ]; then
     --keep-until-expiring
 
   # Set up auto-renewal cron job (runs twice daily, only renews if needed)
-  CRON_CMD="0 0,12 * * * docker compose -f $APP_DIR/docker-compose.prod.yml run --rm certbot renew --quiet && docker compose -f $APP_DIR/docker-compose.prod.yml exec -T proxy nginx -s reload"
+  CRON_CMD="0 0,12 * * * docker compose --project-directory $APP_DIR -f $APP_DIR/docker-compose.prod.yml run --rm certbot renew --quiet && docker compose --project-directory $APP_DIR -f $APP_DIR/docker-compose.prod.yml exec -T proxy nginx -s reload"
   if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
     echo "[4b/5] Setting up auto-renewal cron job"
     (crontab -l 2>/dev/null || true; echo "$CRON_CMD") | crontab -
   fi
 
   echo "[5/5] Switching proxy to HTTPS"
-  echo "Edit $APP_DIR/docker-compose.prod.yml:"
-  echo "- Change proxy mount from infra/proxy/nginx.http.conf to infra/proxy/nginx.https.conf"
-  echo "Then run: docker compose -f $APP_DIR/docker-compose.prod.yml up -d --no-deps proxy"
+  # Update .env without disturbing existing values
+  if grep -q '^PROXY_CONF=' "$APP_DIR/.env"; then
+    sed -i "s|^PROXY_CONF=.*$|PROXY_CONF=./infra/proxy/nginx.https.conf|" "$APP_DIR/.env"
+  else
+    printf '\nPROXY_CONF=./infra/proxy/nginx.https.conf\n' >>"$APP_DIR/.env"
+  fi
+  dc up -d --no-deps proxy
+  dc exec -T proxy nginx -s reload || true
 else
   echo "[4/5] Skipping cert issuance (CERTBOT_EMAIL not set)"
   echo "To enable TLS later: set CERTBOT_EMAIL and run scripts/install-ssl-monitoring-edge-ge.sh"
 fi
 
 echo "Done. Check:"
-echo "- docker compose -f $APP_DIR/docker-compose.prod.yml ps"
+echo "- docker compose --project-directory $APP_DIR -f $APP_DIR/docker-compose.prod.yml ps"
 echo "- curl -fsS http://127.0.0.1/ (on the server)"

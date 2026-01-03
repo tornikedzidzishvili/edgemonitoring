@@ -38,9 +38,10 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      # Start with HTTP-only config to allow initial cert issuance.
-      # After cert is issued, switch this mount to infra/proxy/nginx.https.conf and restart proxy.
-      - ./infra/proxy/nginx.http.conf:/etc/nginx/conf.d/default.conf:ro
+      # PROXY_CONF is set by deploy scripts.
+      # - HTTP config is used briefly for initial cert issuance
+      # - HTTPS config is used for normal operation
+      - ${PROXY_CONF:-./infra/proxy/nginx.https.conf}:/etc/nginx/conf.d/default.conf:ro
       - certbot_www:/var/www/certbot
       - letsencrypt:/etc/letsencrypt:ro
     depends_on:
