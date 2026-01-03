@@ -156,6 +156,23 @@ export type ServerEndpointsResponse = {
   endpoints: ServerEndpoint[];
 };
 
+export type ServerMetricsPoint = {
+  t: string;
+  cpuLoad: number | null;
+  memUsedPct: number | null;
+  samples: number;
+};
+
+export type ServerMetricsResponse = {
+  serverId: string;
+  generatedAt: string;
+  from: string;
+  to: string;
+  days: 5 | 15 | 30;
+  stepMinutes: 5 | 15 | 30 | 60;
+  points: ServerMetricsPoint[];
+};
+
 export type UserInfo = {
   id: string;
   email: string;
@@ -235,6 +252,10 @@ export const api = {
   serversDashboard: (page = 1, limit = 20) =>
     apiGet<ServerDashboardResponse>(`/servers/dashboard?page=${page}&limit=${limit}`),
   server: (id: string) => apiGet<ServerDetail>(`/servers/${encodeURIComponent(id)}`),
+  serverMetrics: (id: string, params: { days: 5 | 15 | 30; stepMinutes: 5 | 15 | 30 | 60 }) =>
+    apiGet<ServerMetricsResponse>(
+      `/servers/${encodeURIComponent(id)}/metrics?days=${params.days}&stepMinutes=${params.stepMinutes}`
+    ),
   serverEndpoints: (id: string) => apiGet<ServerEndpointsResponse>(`/servers/${encodeURIComponent(id)}/endpoints`),
   adminCreateWebapp: (params: { name: string; url: string; serverId?: string }) =>
     apiPost<{ id: string }>(`/admin/webapps`, { name: params.name, url: params.url, serverId: params.serverId || undefined }),

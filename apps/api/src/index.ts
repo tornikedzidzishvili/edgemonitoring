@@ -30,6 +30,16 @@ setInterval(() => {
   cleanExpiredSessions().catch(() => {});
 }, 60 * 60 * 1000);
 
+// Cleanup server metrics history (keep last 30 days)
+setInterval(() => {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  prisma.serverMetricMinute
+    .deleteMany({ where: { minuteStart: { lt: cutoff } } })
+    .catch(() => {
+      // ignore
+    });
+}, 6 * 60 * 60 * 1000);
+
 app.get("/health", async () => ({ ok: true }));
 
 app.get("/servers", async () => {
@@ -165,6 +175,71 @@ app.get("/servers/:id", async (req) => {
     lastSeenAt: server.lastSeenAt,
     createdAt: server.createdAt,
     latestReport: latestReport ? { reportedAt: latestReport.reportedAt, payload: latestReport.payload } : null
+  };
+});
+
+app.get("/servers/:id/metrics", async (req) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+  const query = z
+    .object({
+      days: z.coerce.number().int().min(1).max(30).default(5),
+      stepMinutes: z.coerce.number().int().min(1).max(60).default(5)
+    })
+    .parse(req.query);
+
+  const allowedDays = new Set([5, 15, 30]);
+  const allowedSteps = new Set([5, 15, 30, 60]);
+  const days = allowedDays.has(query.days) ? query.days : 5;
+  const stepMinutes = allowedSteps.has(query.stepMinutes) ? query.stepMinutes : 5;
+
+  const server = await prisma.server.findUnique({ where: { id: params.id } });
+  if (!server) throw app.httpErrors.notFound("server-not-found");
+
+  const now = Date.now();
+  const fromMs = now - days * 24 * 60 * 60 * 1000;
+  const bucketMs = stepMinutes * 60 * 1000;
+  const fromBucketMs = Math.floor(fromMs / bucketMs) * bucketMs;
+  const toBucketMs = Math.floor(now / bucketMs) * bucketMs;
+
+  const rows = await prisma.serverMetricMinute.findMany({
+    where: {
+      serverId: server.id,
+      minuteStart: { gte: new Date(fromBucketMs) }
+    },
+    orderBy: { minuteStart: "asc" }
+  });
+
+  const seriesMap = new Map<number, { cpuSum: number; memSum: number; samples: number }>();
+  for (const r of rows) {
+    const t = r.minuteStart.getTime();
+    const bucket = Math.floor(t / bucketMs) * bucketMs;
+    const prev = seriesMap.get(bucket) ?? { cpuSum: 0, memSum: 0, samples: 0 };
+    prev.cpuSum += r.cpuLoadSum;
+    prev.memSum += r.memUsedPctSum;
+    prev.samples += r.samples;
+    seriesMap.set(bucket, prev);
+  }
+
+  const points: Array<{ t: string; cpuLoad: number | null; memUsedPct: number | null; samples: number }> = [];
+  for (let t = fromBucketMs; t <= toBucketMs; t += bucketMs) {
+    const agg = seriesMap.get(t);
+    const samples = agg?.samples ?? 0;
+    points.push({
+      t: new Date(t).toISOString(),
+      cpuLoad: samples === 0 ? null : agg!.cpuSum / samples,
+      memUsedPct: samples === 0 ? null : agg!.memSum / samples,
+      samples
+    });
+  }
+
+  return {
+    serverId: server.id,
+    generatedAt: new Date().toISOString(),
+    from: new Date(fromBucketMs).toISOString(),
+    to: new Date(toBucketMs).toISOString(),
+    days,
+    stepMinutes,
+    points
   };
 });
 
@@ -888,6 +963,40 @@ app.post("/agents/report", async (req) => {
       payload: body.payload as any
     }
   });
+
+  // Aggregate CPU/memory into per-minute buckets (history for graphs)
+  try {
+    const p = body.payload as any;
+    const cpuLoad = typeof p?.system?.cpu?.load === "number" ? p.system.cpu.load : undefined;
+    const memUsed = typeof p?.system?.mem?.used === "number" ? p.system.mem.used : undefined;
+    const memTotal = typeof p?.system?.mem?.total === "number" ? p.system.mem.total : undefined;
+    const memUsedPct =
+      typeof memUsed === "number" && typeof memTotal === "number" && memTotal > 0 ? (memUsed / memTotal) * 100 : undefined;
+
+    if (typeof cpuLoad === "number" && Number.isFinite(cpuLoad) && typeof memUsedPct === "number" && Number.isFinite(memUsedPct)) {
+      const now = new Date();
+      const minuteStart = new Date(now);
+      minuteStart.setSeconds(0, 0);
+
+      await prisma.serverMetricMinute.upsert({
+        where: { serverId_minuteStart: { serverId: server.id, minuteStart } },
+        create: {
+          serverId: server.id,
+          minuteStart,
+          cpuLoadSum: cpuLoad,
+          memUsedPctSum: memUsedPct,
+          samples: 1
+        },
+        update: {
+          cpuLoadSum: { increment: cpuLoad },
+          memUsedPctSum: { increment: memUsedPct },
+          samples: { increment: 1 }
+        }
+      });
+    }
+  } catch {
+    // Non-fatal
+  }
 
   return { ok: true };
 });

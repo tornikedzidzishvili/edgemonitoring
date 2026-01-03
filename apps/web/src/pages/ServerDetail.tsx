@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { API_BASE_URL, api, type ServerDetail, type ServerEndpoint } from "../lib/api";
+import { API_BASE_URL, api, type ServerDetail, type ServerEndpoint, type ServerMetricsPoint } from "../lib/api";
 import { formatDateTime, formatUptime, formatPct as formatPctLib, formatMs } from "../lib/format";
 
 type LivePoint = {
@@ -178,6 +178,17 @@ export default function ServerDetailPage() {
   const [live, setLive] = useState<LivePoint[]>([]);
   const lastReportedAtRef = useRef<string | null>(null);
 
+  const [metricsDays, setMetricsDays] = useState<5 | 15 | 30>(5);
+  const [metricsStepMinutes, setMetricsStepMinutes] = useState<5 | 15 | 30 | 60>(5);
+  const [metrics, setMetrics] = useState<ServerMetricsPoint[]>([]);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+
+  // Keep defaults sensible for longer ranges to avoid heavy charts.
+  useEffect(() => {
+    const recommended: 5 | 15 | 30 | 60 = metricsDays === 5 ? 5 : metricsDays === 15 ? 15 : 60;
+    setMetricsStepMinutes(recommended);
+  }, [metricsDays]);
+
   // Endpoints state
   const [endpoints, setEndpoints] = useState<ServerEndpoint[]>([]);
   const [endpointsLoading, setEndpointsLoading] = useState(true);
@@ -235,6 +246,36 @@ export default function ServerDetailPage() {
       })
       .finally(() => setEndpointsLoading(false));
   }, [serverId]);
+
+  // Load historical CPU/memory series (persists across page visits)
+  useEffect(() => {
+    if (!serverId) return;
+    let cancelled = false;
+
+    const load = async () => {
+      setMetricsLoading(true);
+      try {
+        const res = await api.serverMetrics(serverId, { days: metricsDays, stepMinutes: metricsStepMinutes });
+        if (!cancelled) setMetrics(res.points);
+      } catch {
+        if (!cancelled) setMetrics([]);
+      } finally {
+        if (!cancelled) setMetricsLoading(false);
+      }
+    };
+
+    load();
+    const poll = setInterval(() => {
+      load().catch(() => {
+        // ignore
+      });
+    }, 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  }, [serverId, metricsDays, metricsStepMinutes]);
 
   useEffect(() => {
     if (!serverId) return;
@@ -321,8 +362,22 @@ export default function ServerDetailPage() {
     return m;
   }, [latestSnap?.containerStats]);
 
-  const cpuSeries = useMemo(() => live.map((p) => ({ t: p.t, cpu: p.cpuLoad })), [live]);
-  const memSeries = useMemo(() => live.map((p) => ({ t: p.t, mem: p.memUsedPct })), [live]);
+  const cpuSeries = useMemo(
+    () =>
+      metrics.map((p) => ({
+        t: p.t,
+        cpu: p.cpuLoad
+      })),
+    [metrics]
+  );
+  const memSeries = useMemo(
+    () =>
+      metrics.map((p) => ({
+        t: p.t,
+        mem: p.memUsedPct
+      })),
+    [metrics]
+  );
 
   const isActive = detail?.lastSeenAt ? Date.now() - new Date(detail.lastSeenAt).getTime() < 5 * 60 * 1000 : false;
   const uptimeMs = detail?.createdAt ? Date.now() - new Date(detail.createdAt).getTime() : 0;
@@ -628,23 +683,67 @@ export default function ServerDetailPage() {
           <div className="border-b border-slate-200 px-5 py-4">
             <div className="flex items-center justify-between">
               <div className="font-medium">CPU Load</div>
-              <div className="text-xs text-slate-500">{live.length} data points</div>
+              <div className="text-xs text-slate-500">
+                {metricsLoading ? "Loading…" : `${metrics.length} points`} • {metricsDays}d • {metricsStepMinutes}m step
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <label className="text-xs font-medium text-slate-600">
+                Range
+                <select
+                  value={metricsDays}
+                  onChange={(e) => setMetricsDays(Number(e.target.value) as 5 | 15 | 30)}
+                  className="ml-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                >
+                  <option value={5}>5 days</option>
+                  <option value={15}>15 days</option>
+                  <option value={30}>30 days</option>
+                </select>
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Interval
+                <select
+                  value={metricsStepMinutes}
+                  onChange={(e) => setMetricsStepMinutes(Number(e.target.value) as 5 | 15 | 30 | 60)}
+                  className="ml-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                >
+                  <option value={5}>5 min</option>
+                  <option value={15}>15 min</option>
+                  <option value={30}>30 min</option>
+                  <option value={60}>60 min</option>
+                </select>
+              </label>
+              <div className="text-xs text-slate-500">Applies to CPU & Memory</div>
             </div>
           </div>
           <div className="p-5">
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={cpuSeries}>
-                  <XAxis dataKey="t" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <XAxis
+                    dataKey="t"
+                    tick={{ fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    minTickGap={32}
+                    tickFormatter={(v) => {
+                      const d = new Date(String(v));
+                      return Number.isFinite(d.getTime()) ? d.toLocaleString() : String(v);
+                    }}
+                  />
                   <YAxis width={40} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                   <Tooltip
+                    labelFormatter={(v) => {
+                      const d = new Date(String(v));
+                      return Number.isFinite(d.getTime()) ? d.toLocaleString() : String(v);
+                    }}
                     contentStyle={{
                       borderRadius: "8px",
                       border: "1px solid #e2e8f0",
                       boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
                     }}
                   />
-                  <Line type="monotone" dataKey="cpu" strokeWidth={2} dot={false} stroke="#10b981" />
+                  <Line type="monotone" dataKey="cpu" strokeWidth={2} dot={false} stroke="#10b981" connectNulls={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -664,17 +763,31 @@ export default function ServerDetailPage() {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={memSeries}>
-                  <XAxis dataKey="t" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <XAxis
+                    dataKey="t"
+                    tick={{ fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    minTickGap={32}
+                    tickFormatter={(v) => {
+                      const d = new Date(String(v));
+                      return Number.isFinite(d.getTime()) ? d.toLocaleString() : String(v);
+                    }}
+                  />
                   <YAxis width={40} domain={[0, 100]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                   <Tooltip
                     formatter={(v) => (typeof v === "number" ? `${v}%` : "—")}
+                    labelFormatter={(v) => {
+                      const d = new Date(String(v));
+                      return Number.isFinite(d.getTime()) ? d.toLocaleString() : String(v);
+                    }}
                     contentStyle={{
                       borderRadius: "8px",
                       border: "1px solid #e2e8f0",
                       boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
                     }}
                   />
-                  <Line type="monotone" dataKey="mem" strokeWidth={2} dot={false} stroke="#6366f1" />
+                  <Line type="monotone" dataKey="mem" strokeWidth={2} dot={false} stroke="#6366f1" connectNulls={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

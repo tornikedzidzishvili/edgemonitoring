@@ -22,6 +22,20 @@ model Server {
   lastSeenAt   DateTime?
   webApps      WebApp[]
   reports      ServerReport[]
+  metricMinutes ServerMetricMinute[]
+}
+
+model ServerMetricMinute {
+  id           String   @id @default(cuid())
+  serverId     String
+  server       Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  minuteStart  DateTime
+  cpuLoadSum   Float    @default(0)
+  memUsedPctSum Float   @default(0)
+  samples      Int      @default(0)
+
+  @@unique([serverId, minuteStart])
+  @@index([serverId, minuteStart])
 }
 
 model SshKey {
