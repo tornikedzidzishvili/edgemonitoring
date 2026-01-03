@@ -4,6 +4,10 @@ dist/
 .env.local
 .env.*.local
 
+# Common production env file pattern
+.env.prod
+.env.production
+
 # Persisted runtime data
 data/
 

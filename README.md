@@ -39,6 +39,118 @@ Open:
 - API: http://localhost:4000/health
 - Web: http://localhost:5173
 
+## Production (TLS + domain monitoring.edge.ge)
+
+This repo includes a production compose file that terminates TLS at an nginx reverse-proxy and serves:
+- `https://monitoring.edge.ge/` -> Web UI
+- `https://monitoring.edge.ge/api/*` -> API
+
+Prereqs on the server:
+- DNS `A` record: `monitoring.edge.ge` -> your server public IP (e.g. `46.224.152.2`)
+- Ports `80` and `443` open to the internet
+- Docker + Docker Compose v2 installed
+
+Steps (on the server):
+1) Set the API encryption secret (required for stored SSH keys):
+
+```bash
+export SSH_KEY_MASTER_SECRET="<choose-a-long-random-secret>"
+```
+
+2) Boot the stack + obtain a Let's Encrypt certificate:
+
+```bash
+chmod +x scripts/install-ssl-monitoring-edge-ge.sh
+CERTBOT_EMAIL="admin@edge.ge" ./scripts/install-ssl-monitoring-edge-ge.sh
+```
+
+3) Switch the proxy to HTTPS:
+- In `docker-compose.prod.yml`, change the proxy config mount from `infra/proxy/nginx.http.conf` to `infra/proxy/nginx.https.conf`.
+- Restart the proxy:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --no-deps proxy
+```
+
+Note: certificate renewals are not automated in this repo yet. You can rerun certbot periodically:
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm certbot renew --webroot -w /var/www/certbot
+```
+
+## Secure server setup (recommended)
+
+Goal: deploy with a non-root user and SSH key-only access (using your `id_ed25519`).
+
+Assumptions:
+- Server OS is Ubuntu/Debian
+- Docker CE is already installed
+- Server IP is reachable (example: `46.224.152.2`)
+
+### 1) Bootstrap (run once)
+From Windows PowerShell on your machine:
+
+```powershell
+Set-Location -Path "D:\Projects\edge Monitoring"
+./scripts/server-setup-windows.ps1 -HostIp 46.224.152.2 -Domain monitoring.edge.ge -DeployUser edge
+```
+
+This will:
+- Create user `edge`
+- Disable password SSH auth and disable root login
+- Allow only `edge` via SSH
+- Enable firewall for `22`, `80`, `443`
+
+### 2) Deploy
+SSH to the server as the deploy user:
+
+```bash
+ssh -i ~/.ssh/id_ed25519 edge@46.224.152.2
+```
+
+Then deploy:
+
+```bash
+cd /opt/edge-monitoring
+SSH_KEY_MASTER_SECRET="<choose-a-long-random-secret>" \
+CERTBOT_EMAIL="admin@edge.ge" \
+./scripts/deploy-prod.sh
+```
+
+Security notes:
+- Never copy private keys to the server.
+- `SSH_KEY_MASTER_SECRET` must be kept private; rotating it requires re-encrypting stored SSH keys.
+
+## GitHub Actions auto-deploy (push-to-prod)
+
+This repo includes a workflow that deploys to your production server on every push to `main` via SSH.
+
+### 1) Create GitHub Secrets
+In your GitHub repo: Settings → Secrets and variables → Actions, add:
+- `PROD_HOST` = `46.224.152.2`
+- `PROD_USER` = `edge`
+- `PROD_SSH_PRIVATE_KEY` = *a deploy key private key* (recommended: create a separate key, do **not** reuse your personal key)
+- `PROD_SSH_PORT` = `22` (optional)
+- `PROD_APP_DIR` = `/opt/edge-monitoring` (optional)
+- `PROD_REPO_URL` = `https://github.com/tornikedzidzishvili/edgemonitoring.git` (optional)
+- `SSH_KEY_MASTER_SECRET` = your production encryption secret (required)
+- `CERTBOT_EMAIL` = email for Let's Encrypt (recommended)
+
+### 2) Install the deploy public key on the server
+Append the deploy key public key to:
+- `/home/edge/.ssh/authorized_keys`
+
+### 3) First deploy
+Ensure you can deploy manually first:
+
+```bash
+ssh -i ~/.ssh/<deploy_key> edge@46.224.152.2
+SSH_KEY_MASTER_SECRET="<secret>" CERTBOT_EMAIL="admin@edge.ge" /opt/edge-monitoring/scripts/deploy-prod.sh
+```
+
+### 4) Automatic deploys
+Push to `main` and GitHub Actions will run [.github/workflows/deploy-prod.yml](.github/workflows/deploy-prod.yml).
+
 ## Database
 The API uses SQLite via Prisma.
 
