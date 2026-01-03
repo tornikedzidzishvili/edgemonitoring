@@ -59,6 +59,11 @@ SSH_KEY_MASTER_SECRET=$SSH_KEY_MASTER_SECRET
 EOF
 
 echo "[3/5] Building and starting stack (HTTP proxy initially)"
+# Use --no-cache when FORCE_REBUILD=1 to bust Docker cache
+if [ "${FORCE_REBUILD:-0}" = "1" ]; then
+  echo "FORCE_REBUILD=1: building without cache"
+  docker compose -f "$APP_DIR/docker-compose.prod.yml" build --no-cache api web
+fi
 docker compose -f "$APP_DIR/docker-compose.prod.yml" up -d --build api web proxy
 
 if [ -n "${CERTBOT_EMAIL:-}" ]; then

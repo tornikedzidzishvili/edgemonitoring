@@ -60,6 +60,7 @@ jobs:
 
             # Deploy (skip git since code was uploaded)
             export SKIP_GIT=1
+            export FORCE_REBUILD=1
             export SSH_KEY_MASTER_SECRET='${{ secrets.SSH_KEY_MASTER_SECRET }}'
             export CERTBOT_EMAIL='${{ secrets.CERTBOT_EMAIL }}'
             export APP_DIR
