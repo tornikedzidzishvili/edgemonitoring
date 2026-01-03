@@ -73,7 +73,8 @@ if [ -n "${CERTBOT_EMAIL:-}" ]; then
     -d monitoring.edge.ge \
     --email "$CERTBOT_EMAIL" \
     --agree-tos \
-    --no-eff-email
+    --no-eff-email \
+    --keep-until-expiring
 
   echo "[5/5] Switching proxy to HTTPS"
   echo "Edit $APP_DIR/docker-compose.prod.yml:"
