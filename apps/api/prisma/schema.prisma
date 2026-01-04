@@ -93,10 +93,12 @@ model User {
   passwordHash String
   fullName     String
   position     String?
+  phone        String?
   role         String    @default("user") // "admin" or "user"
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   sessions     Session[]
+  alertRecipient AlertRecipient?
 }
 
 model Session {
@@ -121,4 +123,88 @@ model SmtpSettings {
   fromEmail String
   fromName  String?
   updatedAt DateTime @updatedAt
+}
+
+model SmsSettings {
+  id        String   @id @default(cuid())
+  enabled   Boolean  @default(false)
+
+  apiKeyEnc String?
+  apiKeyIv  String?
+  apiKeyTag String?
+
+  updatedAt DateTime @updatedAt
+}
+
+model AlertRecipient {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  email     String?
+  phone     String?
+  method    String   @default("none") // none | email | sms | both
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId])
+  @@index([method])
+}
+
+model AlertTemplate {
+  id           String   @id @default(cuid())
+  emailSubject String
+  emailBody    String
+  smsBody      String
+  updatedAt    DateTime @updatedAt
+}
+
+model SharedHosting {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  domains   SharedHostingDomain[]
+}
+
+model SharedHostingDomain {
+  id              String   @id @default(cuid())
+  sharedHostingId String
+  sharedHosting   SharedHosting @relation(fields: [sharedHostingId], references: [id], onDelete: Cascade)
+  domain          String
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  // SSL tracking
+  sslExpiresAt    DateTime?
+  sslIssuer       String?
+  sslLastChecked  DateTime?
+
+  // DNS tracking
+  lastKnownIp     String?
+  dnsLastChecked  DateTime?
+
+  checks          DomainCheckResult[]
+
+  @@unique([sharedHostingId, domain])
+  @@index([sharedHostingId])
+}
+
+model DomainCheckResult {
+  id              String   @id @default(cuid())
+  domainId        String
+  domain          SharedHostingDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  checkedAt       DateTime @default(now())
+
+  // HTTP check
+  httpOk          Boolean?
+  httpStatus      Int?
+  responseTimeMs  Int?
+  httpError       String?
+
+  // DNS check
+  currentIp       String?
+  ipChanged       Boolean  @default(false)
+
+  @@index([domainId, checkedAt])
 }

@@ -168,7 +168,7 @@ export type ServerMetricsResponse = {
   generatedAt: string;
   from: string;
   to: string;
-  days: 5 | 15 | 30;
+  days: 1 | 5 | 15 | 30;
   stepMinutes: 5 | 15 | 30 | 60;
   points: ServerMetricsPoint[];
 };
@@ -177,6 +177,7 @@ export type UserInfo = {
   id: string;
   email: string;
   fullName: string;
+  phone?: string | null;
   position: string | null;
   role: string;
   createdAt: string;
@@ -198,6 +199,85 @@ export type SmtpSettingsInfo = {
 export type SmtpSettingsResponse = {
   configured: boolean;
   settings: SmtpSettingsInfo | null;
+};
+
+export type SmsSettingsInfo = {
+  id: string;
+  enabled: boolean;
+  hasApiKey: boolean;
+  updatedAt: string;
+};
+
+export type SmsSettingsResponse = {
+  configured: boolean;
+  settings: SmsSettingsInfo | null;
+};
+
+export type AlertRecipientInfo = {
+  id: string;
+  user: { id: string; fullName: string; email: string };
+  email: string | null;
+  phone: string | null;
+  method: "none" | "email" | "sms" | "both";
+  updatedAt: string;
+};
+
+export type AlertRecipientsResponse = {
+  recipients: AlertRecipientInfo[];
+};
+
+export type AlertTemplatesInfo = {
+  id: string;
+  emailSubject: string;
+  emailBody: string;
+  smsBody: string;
+  updatedAt: string;
+};
+
+export type AlertTemplatesResponse = {
+  templates: AlertTemplatesInfo;
+};
+
+export type SslStatus = "valid" | "warning" | "critical" | "unknown";
+
+export type SharedHostingSummary = {
+  id: string;
+  name: string;
+  createdAt: string;
+  domainCount: number;
+  issuesCount: number;
+};
+
+export type DomainCheckInfo = {
+  checkedAt: string;
+  httpOk: boolean | null;
+  httpStatus: number | null;
+  responseTimeMs: number | null;
+  httpError: string | null;
+  currentIp: string | null;
+  ipChanged: boolean;
+};
+
+export type SharedHostingDomainInfo = {
+  id: string;
+  domain: string;
+  enabled: boolean;
+  createdAt: string;
+  sslExpiresAt: string | null;
+  sslIssuer: string | null;
+  sslStatus: SslStatus;
+  sslLastChecked: string | null;
+  lastKnownIp: string | null;
+  dnsLastChecked: string | null;
+  lastCheck: DomainCheckInfo | null;
+  uptime24h: number | null;
+};
+
+export type SharedHostingDetail = {
+  id: string;
+  name: string;
+  createdAt: string;
+  domains: SharedHostingDomainInfo[];
 };
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
@@ -252,7 +332,7 @@ export const api = {
   serversDashboard: (page = 1, limit = 20) =>
     apiGet<ServerDashboardResponse>(`/servers/dashboard?page=${page}&limit=${limit}`),
   server: (id: string) => apiGet<ServerDetail>(`/servers/${encodeURIComponent(id)}`),
-  serverMetrics: (id: string, params: { days: 5 | 15 | 30; stepMinutes: 5 | 15 | 30 | 60 }) =>
+  serverMetrics: (id: string, params: { days: 1 | 5 | 15 | 30; stepMinutes: 5 | 15 | 30 | 60 }) =>
     apiGet<ServerMetricsResponse>(
       `/servers/${encodeURIComponent(id)}/metrics?days=${params.days}&stepMinutes=${params.stepMinutes}`
     ),
@@ -335,9 +415,9 @@ export const api = {
   // User management
   users: () => apiGet<{ users: UserInfo[] }>(`/users`),
   user: (id: string) => apiGet<{ user: UserInfo }>(`/users/${encodeURIComponent(id)}`),
-  createUser: (params: { email: string; password: string; fullName: string; position?: string; role?: "admin" | "user" }) =>
+  createUser: (params: { email: string; password: string; fullName: string; phone?: string; position?: string; role?: "admin" | "user" }) =>
     apiPost<{ user: UserInfo }>(`/users`, params),
-  updateUser: (id: string, params: { email?: string; fullName?: string; position?: string | null; role?: "admin" | "user"; password?: string }) =>
+  updateUser: (id: string, params: { email?: string; fullName?: string; phone?: string | null; position?: string | null; role?: "admin" | "user"; password?: string }) =>
     apiPatch<{ user: UserInfo }>(`/users/${encodeURIComponent(id)}`, params),
   deleteUser: (id: string) => apiDelete<{ ok: boolean }>(`/users/${encodeURIComponent(id)}`),
 
@@ -346,5 +426,46 @@ export const api = {
   saveSmtpSettings: (params: { host: string; port: number; secure: boolean; username?: string | null; password?: string | null; fromEmail: string; fromName?: string | null }) =>
     apiPost<{ settings: SmtpSettingsInfo }>(`/settings/smtp`, params),
   testSmtp: (testEmail: string) => apiPost<{ ok: boolean; message: string }>(`/settings/smtp/test`, { testEmail }),
-  deleteSmtpSettings: () => apiDelete<{ ok: boolean }>(`/settings/smtp`)
+  deleteSmtpSettings: () => apiDelete<{ ok: boolean }>(`/settings/smtp`),
+
+  // SMS settings
+  smsSettings: () => apiGet<SmsSettingsResponse>(`/settings/sms`),
+  saveSmsSettings: (params: { enabled: boolean; apiKey?: string | null }) =>
+    apiPost<{ settings: SmsSettingsInfo }>(`/settings/sms`, params),
+
+  // Alerts
+  alertRecipients: () => apiGet<AlertRecipientsResponse>(`/settings/alerts/recipients`),
+  saveAlertRecipient: (params: { userId: string; email?: string | null; phone?: string | null; method: "none" | "email" | "sms" | "both" }) =>
+    apiPost<{ recipient: AlertRecipientInfo }>(`/settings/alerts/recipients`, params),
+  alertTemplates: () => apiGet<AlertTemplatesResponse>(`/settings/templates/alerts`),
+  saveAlertTemplates: (params: { emailSubject: string; emailBody: string; smsBody: string }) =>
+    apiPost<AlertTemplatesResponse>(`/settings/templates/alerts`, params),
+
+  // Shared Hosting
+  sharedHosting: () => apiGet<SharedHostingSummary[]>(`/shared-hosting`),
+  sharedHostingDetail: (id: string) => apiGet<SharedHostingDetail>(`/shared-hosting/${encodeURIComponent(id)}`),
+  sharedHostingDomainHistory: (id: string, domainId: string, range: "24h" | "7d" | "30d" = "24h") =>
+    apiGet<DomainCheckInfo[]>(`/shared-hosting/${encodeURIComponent(id)}/domains/${encodeURIComponent(domainId)}/history?range=${range}`),
+
+  adminCreateSharedHosting: (params: { name: string }) =>
+    apiPost<{ id: string; name: string; createdAt: string }>(`/admin/shared-hosting`, params),
+  adminUpdateSharedHosting: (id: string, params: { name?: string }) =>
+    apiPatch<{ id: string; name: string; createdAt: string }>(`/admin/shared-hosting/${encodeURIComponent(id)}`, params),
+  adminDeleteSharedHosting: (id: string) =>
+    apiDelete<{ ok: boolean }>(`/admin/shared-hosting/${encodeURIComponent(id)}`),
+
+  adminAddDomain: (sharedHostingId: string, params: { domain: string }) =>
+    apiPost<{ id: string; domain: string; enabled: boolean; createdAt: string }>(
+      `/admin/shared-hosting/${encodeURIComponent(sharedHostingId)}/domains`,
+      params
+    ),
+  adminUpdateDomain: (sharedHostingId: string, domainId: string, params: { domain?: string; enabled?: boolean }) =>
+    apiPatch<{ id: string; domain: string; enabled: boolean; createdAt: string }>(
+      `/admin/shared-hosting/${encodeURIComponent(sharedHostingId)}/domains/${encodeURIComponent(domainId)}`,
+      params
+    ),
+  adminDeleteDomain: (sharedHostingId: string, domainId: string) =>
+    apiDelete<{ ok: boolean }>(
+      `/admin/shared-hosting/${encodeURIComponent(sharedHostingId)}/domains/${encodeURIComponent(domainId)}`
+    )
 };

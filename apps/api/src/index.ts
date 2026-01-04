@@ -6,7 +6,8 @@ import { prisma } from "./db.js";
 import { getEnv } from "./env.js";
 import { getAgentKeyHash } from "./auth.js";
 import { generateApiKey, hashApiKey } from "./security.js";
-import { startUptimeScheduler } from "./scheduler.js";
+import { startUptimeScheduler, startDomainScheduler } from "./scheduler.js";
+import { getSslStatus } from "./domainChecker.js";
 import { probeOverSsh } from "./sshProbe.js";
 import { decryptString, encryptString } from "./cryptoBox.js";
 import { authRoutes } from "./routes/auth.js";
@@ -182,15 +183,15 @@ app.get("/servers/:id/metrics", async (req) => {
   const params = z.object({ id: z.string().min(1) }).parse(req.params);
   const query = z
     .object({
-      days: z.coerce.number().int().min(1).max(30).default(5),
-      stepMinutes: z.coerce.number().int().min(1).max(60).default(5)
+      days: z.coerce.number().int().min(1).max(30).default(1),
+      stepMinutes: z.coerce.number().int().min(1).max(60).default(60)
     })
     .parse(req.query);
 
-  const allowedDays = new Set([5, 15, 30]);
+  const allowedDays = new Set([1, 5, 15, 30]);
   const allowedSteps = new Set([5, 15, 30, 60]);
-  const days = allowedDays.has(query.days) ? query.days : 5;
-  const stepMinutes = allowedSteps.has(query.stepMinutes) ? query.stepMinutes : 5;
+  const days = allowedDays.has(query.days) ? query.days : 1;
+  const stepMinutes = allowedSteps.has(query.stepMinutes) ? query.stepMinutes : 60;
 
   const server = await prisma.server.findUnique({ where: { id: params.id } });
   if (!server) throw app.httpErrors.notFound("server-not-found");
@@ -1001,6 +1002,293 @@ app.post("/agents/report", async (req) => {
   return { ok: true };
 });
 
+// ============ SHARED HOSTING ROUTES ============
+
+// List all shared hosting accounts
+app.get("/shared-hosting", async () => {
+  const accounts = await prisma.sharedHosting.findMany({
+    orderBy: { createdAt: "desc" },
+    include: {
+      domains: {
+        select: {
+          id: true,
+          domain: true,
+          enabled: true,
+          sslExpiresAt: true,
+          lastKnownIp: true
+        }
+      }
+    }
+  });
+
+  return accounts.map((a) => {
+    const domainCount = a.domains.length;
+    const issuesCount = a.domains.filter((d) => {
+      if (!d.enabled) return false;
+      const status = getSslStatus(d.sslExpiresAt);
+      return status === "critical" || status === "warning";
+    }).length;
+
+    return {
+      id: a.id,
+      name: a.name,
+      createdAt: a.createdAt,
+      domainCount,
+      issuesCount
+    };
+  });
+});
+
+// Get shared hosting account with all domains
+app.get("/shared-hosting/:id", async (req) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+
+  const account = await prisma.sharedHosting.findUnique({
+    where: { id: params.id },
+    include: {
+      domains: {
+        orderBy: { createdAt: "desc" }
+      }
+    }
+  });
+
+  if (!account) throw app.httpErrors.notFound("shared-hosting-not-found");
+
+  const now = Date.now();
+  const since24h = new Date(now - 24 * 60 * 60 * 1000);
+
+  const domainsWithStatus = await Promise.all(
+    account.domains.map(async (d) => {
+      const lastCheck = await prisma.domainCheckResult.findFirst({
+        where: { domainId: d.id },
+        orderBy: { checkedAt: "desc" }
+      });
+
+      const [total24h, ok24h] = await Promise.all([
+        prisma.domainCheckResult.count({ where: { domainId: d.id, checkedAt: { gte: since24h } } }),
+        prisma.domainCheckResult.count({ where: { domainId: d.id, checkedAt: { gte: since24h }, httpOk: true } })
+      ]);
+
+      return {
+        id: d.id,
+        domain: d.domain,
+        enabled: d.enabled,
+        createdAt: d.createdAt,
+        sslExpiresAt: d.sslExpiresAt,
+        sslIssuer: d.sslIssuer,
+        sslStatus: getSslStatus(d.sslExpiresAt),
+        sslLastChecked: d.sslLastChecked,
+        lastKnownIp: d.lastKnownIp,
+        dnsLastChecked: d.dnsLastChecked,
+        lastCheck: lastCheck
+          ? {
+              checkedAt: lastCheck.checkedAt,
+              httpOk: lastCheck.httpOk,
+              httpStatus: lastCheck.httpStatus,
+              responseTimeMs: lastCheck.responseTimeMs,
+              httpError: lastCheck.httpError,
+              currentIp: lastCheck.currentIp,
+              ipChanged: lastCheck.ipChanged
+            }
+          : null,
+        uptime24h: total24h === 0 ? null : ok24h / total24h
+      };
+    })
+  );
+
+  return {
+    id: account.id,
+    name: account.name,
+    createdAt: account.createdAt,
+    domains: domainsWithStatus
+  };
+});
+
+// Get domain check history
+app.get("/shared-hosting/:id/domains/:domainId/history", async (req) => {
+  const params = z
+    .object({
+      id: z.string().min(1),
+      domainId: z.string().min(1)
+    })
+    .parse(req.params);
+
+  const query = z
+    .object({
+      range: z.enum(["24h", "7d", "30d"]).default("24h")
+    })
+    .parse(req.query);
+
+  const domain = await prisma.sharedHostingDomain.findFirst({
+    where: { id: params.domainId, sharedHostingId: params.id }
+  });
+
+  if (!domain) throw app.httpErrors.notFound("domain-not-found");
+
+  const now = Date.now();
+  const from =
+    query.range === "24h"
+      ? new Date(now - 24 * 60 * 60 * 1000)
+      : query.range === "7d"
+        ? new Date(now - 7 * 24 * 60 * 60 * 1000)
+        : new Date(now - 30 * 24 * 60 * 60 * 1000);
+
+  const checks = await prisma.domainCheckResult.findMany({
+    where: { domainId: domain.id, checkedAt: { gte: from } },
+    orderBy: { checkedAt: "asc" },
+    take: 5000
+  });
+
+  return checks.map((c) => ({
+    checkedAt: c.checkedAt,
+    httpOk: c.httpOk,
+    httpStatus: c.httpStatus,
+    responseTimeMs: c.responseTimeMs,
+    httpError: c.httpError,
+    currentIp: c.currentIp,
+    ipChanged: c.ipChanged
+  }));
+});
+
+// Admin: create shared hosting account
+app.post("/admin/shared-hosting", async (req) => {
+  const body = z
+    .object({
+      name: z.string().min(1)
+    })
+    .parse(req.body);
+
+  const account = await prisma.sharedHosting.create({
+    data: { name: body.name }
+  });
+
+  return { id: account.id, name: account.name, createdAt: account.createdAt };
+});
+
+// Admin: update shared hosting account
+app.patch("/admin/shared-hosting/:id", async (req) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+  const body = z
+    .object({
+      name: z.string().min(1).optional()
+    })
+    .parse(req.body);
+
+  const account = await prisma.sharedHosting.update({
+    where: { id: params.id },
+    data: { ...(body.name !== undefined ? { name: body.name } : {}) }
+  });
+
+  return { id: account.id, name: account.name, createdAt: account.createdAt };
+});
+
+// Admin: delete shared hosting account
+app.delete("/admin/shared-hosting/:id", async (req) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+
+  await prisma.sharedHosting.delete({ where: { id: params.id } });
+
+  return { ok: true };
+});
+
+// Admin: add domain to shared hosting
+app.post("/admin/shared-hosting/:id/domains", async (req) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+  const body = z
+    .object({
+      domain: z.string().min(1)
+    })
+    .parse(req.body);
+
+  const account = await prisma.sharedHosting.findUnique({ where: { id: params.id } });
+  if (!account) throw app.httpErrors.notFound("shared-hosting-not-found");
+
+  // Normalize domain (remove protocol, trailing slashes)
+  let normalizedDomain = body.domain.trim().toLowerCase();
+  normalizedDomain = normalizedDomain.replace(/^https?:\/\//, "");
+  normalizedDomain = normalizedDomain.replace(/\/.*$/, "");
+
+  const domain = await prisma.sharedHostingDomain.create({
+    data: {
+      sharedHostingId: account.id,
+      domain: normalizedDomain
+    }
+  });
+
+  return {
+    id: domain.id,
+    domain: domain.domain,
+    enabled: domain.enabled,
+    createdAt: domain.createdAt
+  };
+});
+
+// Admin: update domain
+app.patch("/admin/shared-hosting/:id/domains/:domainId", async (req) => {
+  const params = z
+    .object({
+      id: z.string().min(1),
+      domainId: z.string().min(1)
+    })
+    .parse(req.params);
+
+  const body = z
+    .object({
+      domain: z.string().min(1).optional(),
+      enabled: z.boolean().optional()
+    })
+    .parse(req.body);
+
+  const domain = await prisma.sharedHostingDomain.findFirst({
+    where: { id: params.domainId, sharedHostingId: params.id }
+  });
+
+  if (!domain) throw app.httpErrors.notFound("domain-not-found");
+
+  let normalizedDomain = body.domain;
+  if (normalizedDomain) {
+    normalizedDomain = normalizedDomain.trim().toLowerCase();
+    normalizedDomain = normalizedDomain.replace(/^https?:\/\//, "");
+    normalizedDomain = normalizedDomain.replace(/\/.*$/, "");
+  }
+
+  const updated = await prisma.sharedHostingDomain.update({
+    where: { id: domain.id },
+    data: {
+      ...(normalizedDomain !== undefined ? { domain: normalizedDomain } : {}),
+      ...(body.enabled !== undefined ? { enabled: body.enabled } : {})
+    }
+  });
+
+  return {
+    id: updated.id,
+    domain: updated.domain,
+    enabled: updated.enabled,
+    createdAt: updated.createdAt
+  };
+});
+
+// Admin: delete domain
+app.delete("/admin/shared-hosting/:id/domains/:domainId", async (req) => {
+  const params = z
+    .object({
+      id: z.string().min(1),
+      domainId: z.string().min(1)
+    })
+    .parse(req.params);
+
+  const domain = await prisma.sharedHostingDomain.findFirst({
+    where: { id: params.domainId, sharedHostingId: params.id }
+  });
+
+  if (!domain) throw app.httpErrors.notFound("domain-not-found");
+
+  await prisma.sharedHostingDomain.delete({ where: { id: domain.id } });
+
+  return { ok: true };
+});
+
 startUptimeScheduler(prisma, env);
+startDomainScheduler(prisma, env);
 
 await app.listen({ port: env.PORT, host: "0.0.0.0" });

@@ -1,12 +1,18 @@
 import { useState } from "react";
 import UsersSettings from "../components/settings/UsersSettings";
 import SmtpSettings from "../components/settings/SmtpSettings";
+import SmsSettings from "../components/settings/SmsSettings";
+import AlertsSettings from "../components/settings/AlertsSettings";
+import TemplatesSettings from "../components/settings/TemplatesSettings";
 
-type Tab = "users" | "smtp";
+type Tab = "users" | "smtp" | "sms" | "alerts" | "templates";
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "users", label: "Users" },
-  { id: "smtp", label: "SMTP" }
+  { id: "smtp", label: "SMTP" },
+  { id: "sms", label: "SMS" },
+  { id: "alerts", label: "Alerts" },
+  { id: "templates", label: "Templates" }
 ];
 
 export default function Settings() {
@@ -38,6 +44,9 @@ export default function Settings() {
       <div className="mt-6">
         {activeTab === "users" && <UsersSettings />}
         {activeTab === "smtp" && <SmtpSettings />}
+        {activeTab === "sms" && <SmsSettings />}
+        {activeTab === "alerts" && <AlertsSettings />}
+        {activeTab === "templates" && <TemplatesSettings />}
       </div>
     </div>
   );

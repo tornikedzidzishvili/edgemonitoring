@@ -13,6 +13,7 @@ export async function usersRoutes(app: FastifyInstance) {
         id: true,
         email: true,
         fullName: true,
+        phone: true,
         position: true,
         role: true,
         createdAt: true,
@@ -32,6 +33,7 @@ export async function usersRoutes(app: FastifyInstance) {
         id: true,
         email: true,
         fullName: true,
+        phone: true,
         position: true,
         role: true,
         createdAt: true,
@@ -53,6 +55,7 @@ export async function usersRoutes(app: FastifyInstance) {
         email: z.string().email(),
         password: z.string().min(8),
         fullName: z.string().min(1),
+        phone: z.string().min(3).optional(),
         position: z.string().optional(),
         role: z.enum(["admin", "user"]).default("user")
       })
@@ -73,6 +76,7 @@ export async function usersRoutes(app: FastifyInstance) {
         email: body.email.toLowerCase(),
         passwordHash,
         fullName: body.fullName,
+        phone: body.phone ?? null,
         position: body.position ?? null,
         role: body.role
       },
@@ -80,6 +84,7 @@ export async function usersRoutes(app: FastifyInstance) {
         id: true,
         email: true,
         fullName: true,
+        phone: true,
         position: true,
         role: true,
         createdAt: true,
@@ -97,6 +102,7 @@ export async function usersRoutes(app: FastifyInstance) {
       .object({
         email: z.string().email().optional(),
         fullName: z.string().min(1).optional(),
+        phone: z.string().min(3).nullable().optional(),
         position: z.string().nullable().optional(),
         role: z.enum(["admin", "user"]).optional(),
         password: z.string().min(8).optional()
@@ -121,6 +127,7 @@ export async function usersRoutes(app: FastifyInstance) {
     const data: Record<string, unknown> = {};
     if (body.email !== undefined) data.email = body.email.toLowerCase();
     if (body.fullName !== undefined) data.fullName = body.fullName;
+    if (body.phone !== undefined) data.phone = body.phone;
     if (body.position !== undefined) data.position = body.position;
     if (body.role !== undefined) data.role = body.role;
     if (body.password !== undefined) data.passwordHash = await hashPassword(body.password);
@@ -132,6 +139,7 @@ export async function usersRoutes(app: FastifyInstance) {
         id: true,
         email: true,
         fullName: true,
+        phone: true,
         position: true,
         role: true,
         createdAt: true,

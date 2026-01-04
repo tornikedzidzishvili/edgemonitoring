@@ -1,9 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { encryptString } from "../cryptoBox.js";
+import { getEnv } from "../env.js";
 import { requireAdmin } from "../middleware/sessionAuth.js";
 
 export async function settingsRoutes(app: FastifyInstance) {
+  const env = getEnv();
+
   // Get SMTP settings (admin only)
   app.get("/settings/smtp", { preHandler: requireAdmin }, async () => {
     const settings = await prisma.smtpSettings.findFirst();
@@ -113,5 +117,198 @@ export async function settingsRoutes(app: FastifyInstance) {
       await prisma.smtpSettings.delete({ where: { id: existing.id } });
     }
     return { ok: true };
+  });
+
+  // Get SMS settings (admin only)
+  app.get("/settings/sms", { preHandler: requireAdmin }, async () => {
+    const settings = await prisma.smsSettings.findFirst();
+
+    if (!settings) {
+      return { configured: false, settings: null };
+    }
+
+    return {
+      configured: !!settings.apiKeyEnc,
+      settings: {
+        id: settings.id,
+        enabled: settings.enabled,
+        hasApiKey: !!settings.apiKeyEnc,
+        updatedAt: settings.updatedAt
+      }
+    };
+  });
+
+  // Create or update SMS settings (admin only)
+  app.post("/settings/sms", { preHandler: requireAdmin }, async (req) => {
+    const body = z
+      .object({
+        enabled: z.boolean().default(false),
+        apiKey: z.string().min(1).nullable().optional()
+      })
+      .parse(req.body);
+
+    const existing = await prisma.smsSettings.findFirst();
+
+    const data: {
+      enabled: boolean;
+      apiKeyEnc?: string | null;
+      apiKeyIv?: string | null;
+      apiKeyTag?: string | null;
+    } = {
+      enabled: body.enabled
+    };
+
+    if (body.apiKey === null) {
+      data.apiKeyEnc = null;
+      data.apiKeyIv = null;
+      data.apiKeyTag = null;
+    } else if (typeof body.apiKey === "string") {
+      const box = encryptString(body.apiKey, env.SSH_KEY_MASTER_SECRET);
+      data.apiKeyEnc = box.enc;
+      data.apiKeyIv = box.iv;
+      data.apiKeyTag = box.tag;
+    }
+
+    let settings;
+    if (existing) {
+      // If apiKey is not provided, keep the existing one
+      if (body.apiKey === undefined) {
+        delete (data as any).apiKeyEnc;
+        delete (data as any).apiKeyIv;
+        delete (data as any).apiKeyTag;
+      }
+
+      settings = await prisma.smsSettings.update({
+        where: { id: existing.id },
+        data
+      });
+    } else {
+      settings = await prisma.smsSettings.create({ data });
+    }
+
+    return {
+      settings: {
+        id: settings.id,
+        enabled: settings.enabled,
+        hasApiKey: !!settings.apiKeyEnc,
+        updatedAt: settings.updatedAt
+      }
+    };
+  });
+
+  // List alert recipients (admin only)
+  app.get("/settings/alerts/recipients", { preHandler: requireAdmin }, async () => {
+    const recipients = await prisma.alertRecipient.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { user: { select: { id: true, fullName: true, email: true } } }
+    });
+
+    return {
+      recipients: recipients.map((r) => ({
+        id: r.id,
+        user: r.user,
+        email: r.email,
+        phone: r.phone,
+        method: r.method,
+        updatedAt: r.updatedAt
+      }))
+    };
+  });
+
+  // Create or update alert recipient (admin only)
+  app.post("/settings/alerts/recipients", { preHandler: requireAdmin }, async (req) => {
+    const body = z
+      .object({
+        userId: z.string().min(1),
+        email: z.string().email().nullable().optional(),
+        phone: z.string().min(3).nullable().optional(),
+        method: z.enum(["none", "email", "sms", "both"]).default("none")
+      })
+      .parse(req.body);
+
+    // Validate required contact info based on method
+    if ((body.method === "email" || body.method === "both") && !body.email) {
+      throw app.httpErrors.badRequest("missing-email-for-alerts");
+    }
+    if ((body.method === "sms" || body.method === "both") && !body.phone) {
+      throw app.httpErrors.badRequest("missing-phone-for-alerts");
+    }
+
+    const existing = await prisma.alertRecipient.findUnique({ where: { userId: body.userId } });
+
+    const data = {
+      userId: body.userId,
+      email: body.email ?? null,
+      phone: body.phone ?? null,
+      method: body.method
+    };
+
+    const saved = existing
+      ? await prisma.alertRecipient.update({ where: { id: existing.id }, data })
+      : await prisma.alertRecipient.create({ data });
+
+    const user = await prisma.user.findUnique({ where: { id: saved.userId }, select: { id: true, fullName: true, email: true } });
+
+    return {
+      recipient: {
+        id: saved.id,
+        user,
+        email: saved.email,
+        phone: saved.phone,
+        method: saved.method,
+        updatedAt: saved.updatedAt
+      }
+    };
+  });
+
+  // Get alert templates (admin only)
+  app.get("/settings/templates/alerts", { preHandler: requireAdmin }, async () => {
+    let tmpl = await prisma.alertTemplate.findFirst();
+    if (!tmpl) {
+      tmpl = await prisma.alertTemplate.create({
+        data: {
+          emailSubject: "Alert: {{name}} is DOWN",
+          emailBody:
+            "Service is DOWN\n\nName: {{name}}\nURL: {{url}}\nTime: {{time}}\nHTTP: {{httpStatus}}\nError: {{error}}\n",
+          smsBody: "ALERT: {{name}} DOWN {{time}}"
+        }
+      });
+    }
+
+    return {
+      templates: {
+        id: tmpl.id,
+        emailSubject: tmpl.emailSubject,
+        emailBody: tmpl.emailBody,
+        smsBody: tmpl.smsBody,
+        updatedAt: tmpl.updatedAt
+      }
+    };
+  });
+
+  // Save alert templates (admin only)
+  app.post("/settings/templates/alerts", { preHandler: requireAdmin }, async (req) => {
+    const body = z
+      .object({
+        emailSubject: z.string().min(1),
+        emailBody: z.string().min(1),
+        smsBody: z.string().min(1)
+      })
+      .parse(req.body);
+
+    const existing = await prisma.alertTemplate.findFirst();
+    const saved = existing
+      ? await prisma.alertTemplate.update({ where: { id: existing.id }, data: body })
+      : await prisma.alertTemplate.create({ data: body });
+
+    return {
+      templates: {
+        id: saved.id,
+        emailSubject: saved.emailSubject,
+        emailBody: saved.emailBody,
+        smsBody: saved.smsBody,
+        updatedAt: saved.updatedAt
+      }
+    };
   });
 }

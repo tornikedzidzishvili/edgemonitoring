@@ -12,6 +12,7 @@ export default function UserFormModal({ user, onClose, onSave }: Props) {
 
   const [fullName, setFullName] = useState(user?.fullName ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
+  const [phone, setPhone] = useState(user?.phone ?? "");
   const [position, setPosition] = useState(user?.position ?? "");
   const [role, setRole] = useState<"admin" | "user">(user?.role === "admin" ? "admin" : "user");
   const [password, setPassword] = useState("");
@@ -45,6 +46,7 @@ export default function UserFormModal({ user, onClose, onSave }: Props) {
         await api.updateUser(user.id, {
           email,
           fullName,
+          phone: phone || null,
           position: position || null,
           role,
           ...(password ? { password } : {})
@@ -54,6 +56,7 @@ export default function UserFormModal({ user, onClose, onSave }: Props) {
           email,
           password,
           fullName,
+          phone: phone || undefined,
           position: position || undefined,
           role
         });
@@ -117,6 +120,20 @@ export default function UserFormModal({ user, onClose, onSave }: Props) {
               type="text"
               value={position}
               onChange={(e) => setPosition(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="phone" className="block text-sm font-medium text-slate-700">
+              Phone <span className="text-slate-400">(optional)</span>
+            </label>
+            <input
+              id="phone"
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="9955XXXXXXXX"
               className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
             />
           </div>

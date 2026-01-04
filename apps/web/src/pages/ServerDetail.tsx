@@ -178,14 +178,14 @@ export default function ServerDetailPage() {
   const [live, setLive] = useState<LivePoint[]>([]);
   const lastReportedAtRef = useRef<string | null>(null);
 
-  const [metricsDays, setMetricsDays] = useState<5 | 15 | 30>(5);
-  const [metricsStepMinutes, setMetricsStepMinutes] = useState<5 | 15 | 30 | 60>(5);
+  const [metricsDays, setMetricsDays] = useState<1 | 5 | 15 | 30>(1);
+  const [metricsStepMinutes, setMetricsStepMinutes] = useState<5 | 15 | 30 | 60>(60);
   const [metrics, setMetrics] = useState<ServerMetricsPoint[]>([]);
   const [metricsLoading, setMetricsLoading] = useState(false);
 
   // Keep defaults sensible for longer ranges to avoid heavy charts.
   useEffect(() => {
-    const recommended: 5 | 15 | 30 | 60 = metricsDays === 5 ? 5 : metricsDays === 15 ? 15 : 60;
+    const recommended: 5 | 15 | 30 | 60 = metricsDays === 1 ? 60 : metricsDays === 5 ? 5 : metricsDays === 15 ? 15 : 60;
     setMetricsStepMinutes(recommended);
   }, [metricsDays]);
 
@@ -692,9 +692,10 @@ export default function ServerDetailPage() {
                 Range
                 <select
                   value={metricsDays}
-                  onChange={(e) => setMetricsDays(Number(e.target.value) as 5 | 15 | 30)}
+                  onChange={(e) => setMetricsDays(Number(e.target.value) as 1 | 5 | 15 | 30)}
                   className="ml-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
                 >
+                  <option value={1}>1 day</option>
                   <option value={5}>5 days</option>
                   <option value={15}>15 days</option>
                   <option value={30}>30 days</option>
