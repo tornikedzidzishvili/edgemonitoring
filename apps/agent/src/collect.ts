@@ -20,6 +20,12 @@ export type AgentPayload = {
       free: number;
     };
     disk: Array<{ fs: string; size: number; used: number; available: number; mount: string }>;
+    // v0.1.6
+    processesTopCpu?: Array<{ pid: number; name: string; cpuPercent?: number | null; memPercent?: number | null }>;
+    processesTopMem?: Array<{ pid: number; name: string; cpuPercent?: number | null; memPercent?: number | null }>;
+    // Backward-compatible (v0.1.4+)
+    processesTop?: Array<{ pid: number; name: string; cpuPercent?: number | null; memPercent?: number | null }>;
+    // Legacy field (kept for safety during rollout)
     topProcesses?: Array<{ pid: number; name: string; cpu: number; mem: number }>;
   };
   docker: {
@@ -120,18 +126,54 @@ export async function collectSnapshot(dockerSocketPath: string): Promise<AgentPa
     si.processes()
   ]);
 
-  const topProcesses: AgentPayload["system"]["topProcesses"] = Array.isArray(processes?.list)
-    ? processes.list
+  const processRows: Array<{ pid: number; name: string; cpuPercent?: number | null; memPercent?: number | null; cpu: number; mem: number }> =
+    Array.isArray(processes?.list)
+      ? processes.list
+          .map((p: any) => {
+            const pid = Number(p?.pid ?? 0) || 0;
+            const name = String(p?.name ?? p?.command ?? "").slice(0, 120);
+            const cpu = Number(p?.cpu ?? 0);
+            const mem = Number(p?.mem ?? 0);
+            return {
+              pid,
+              name,
+              cpu: Number.isFinite(cpu) ? cpu : 0,
+              mem: Number.isFinite(mem) ? mem : 0,
+              cpuPercent: Number.isFinite(cpu) ? cpu : null,
+              memPercent: Number.isFinite(mem) ? mem : null
+            };
+          })
+          .filter((p) => p.pid > 0 && p.name)
+      : [];
+
+  const processesTopCpu: AgentPayload["system"]["processesTopCpu"] = processRows.length
+    ? processRows
         .slice()
-        .sort((a: any, b: any) => (Number(b?.cpu ?? 0) || 0) - (Number(a?.cpu ?? 0) || 0))
+        .sort((a, b) => (b.cpu ?? 0) - (a.cpu ?? 0))
         .slice(0, 5)
-        .map((p: any) => ({
-          pid: Number(p?.pid ?? 0) || 0,
-          name: String(p?.name ?? p?.command ?? "").slice(0, 120),
-          cpu: Number(p?.cpu ?? 0) || 0,
-          mem: Number(p?.mem ?? 0) || 0
-        }))
-        .filter((p) => p.pid > 0 && p.name)
+        .map((p) => ({ pid: p.pid, name: p.name, cpuPercent: p.cpuPercent, memPercent: p.memPercent }))
+    : undefined;
+
+  const processesTopMem: AgentPayload["system"]["processesTopMem"] = processRows.length
+    ? processRows
+        .slice()
+        .sort((a, b) => (b.mem ?? 0) - (a.mem ?? 0))
+        .slice(0, 5)
+        .map((p) => ({ pid: p.pid, name: p.name, cpuPercent: p.cpuPercent, memPercent: p.memPercent }))
+    : undefined;
+
+  const processesTop: AgentPayload["system"]["processesTop"] = processRows.length
+    ? processRows
+        .slice()
+        .sort((a, b) => (b.cpu ?? 0) - (a.cpu ?? 0) || (b.mem ?? 0) - (a.mem ?? 0))
+        .slice(0, 5)
+        .map((p) => ({ pid: p.pid, name: p.name, cpuPercent: p.cpuPercent, memPercent: p.memPercent }))
+    : undefined;
+
+  const topProcesses: AgentPayload["system"]["topProcesses"] = processRows.length
+    ? processRows
+        .slice(0, 5)
+        .map((p) => ({ pid: p.pid, name: p.name, cpu: p.cpu, mem: p.mem }))
     : undefined;
 
   let containers: AgentPayload["docker"]["containers"] = [];
@@ -209,6 +251,9 @@ export async function collectSnapshot(dockerSocketPath: string): Promise<AgentPa
         available: d.available,
         mount: d.mount
       })),
+      ...(processesTopCpu ? { processesTopCpu } : {}),
+      ...(processesTopMem ? { processesTopMem } : {}),
+      ...(processesTop ? { processesTop } : {}),
       ...(topProcesses ? { topProcesses } : {})
     },
     docker: {

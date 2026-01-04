@@ -102,6 +102,10 @@ function parseAgentSnapshot(payload: unknown): {
   memUsed?: number;
   memTotal?: number;
   disk?: Array<{ fs?: string; size?: number; used?: number; available?: number; mount?: string }>;
+  processesTop?: Array<{ pid?: number; name?: string; cpuPercent?: number | null; memPercent?: number | null }>;
+  processesTopCpu?: Array<{ pid?: number; name?: string; cpuPercent?: number | null; memPercent?: number | null }>;
+  processesTopMem?: Array<{ pid?: number; name?: string; cpuPercent?: number | null; memPercent?: number | null }>;
+  // legacy
   topProcesses?: Array<{ pid?: number; name?: string; cpu?: number; mem?: number }>;
   containers?: Array<{ name?: string; image?: string; state?: string; status?: string; ports?: string[] }>;
   containerStats?: Array<{
@@ -135,6 +139,33 @@ function parseAgentSnapshot(payload: unknown): {
         used: typeof d?.used === "number" ? d.used : undefined,
         available: typeof d?.available === "number" ? d.available : undefined,
         mount: d?.mount
+      }))
+    : undefined;
+
+  const processesTop = Array.isArray(system?.processesTop)
+    ? system.processesTop.map((p: any) => ({
+        pid: typeof p?.pid === "number" ? p.pid : undefined,
+        name: typeof p?.name === "string" ? p.name : undefined,
+        cpuPercent: typeof p?.cpuPercent === "number" ? p.cpuPercent : p?.cpuPercent === null ? null : undefined,
+        memPercent: typeof p?.memPercent === "number" ? p.memPercent : p?.memPercent === null ? null : undefined
+      }))
+    : undefined;
+
+  const processesTopCpu = Array.isArray(system?.processesTopCpu)
+    ? system.processesTopCpu.map((p: any) => ({
+        pid: typeof p?.pid === "number" ? p.pid : undefined,
+        name: typeof p?.name === "string" ? p.name : undefined,
+        cpuPercent: typeof p?.cpuPercent === "number" ? p.cpuPercent : p?.cpuPercent === null ? null : undefined,
+        memPercent: typeof p?.memPercent === "number" ? p.memPercent : p?.memPercent === null ? null : undefined
+      }))
+    : undefined;
+
+  const processesTopMem = Array.isArray(system?.processesTopMem)
+    ? system.processesTopMem.map((p: any) => ({
+        pid: typeof p?.pid === "number" ? p.pid : undefined,
+        name: typeof p?.name === "string" ? p.name : undefined,
+        cpuPercent: typeof p?.cpuPercent === "number" ? p.cpuPercent : p?.cpuPercent === null ? null : undefined,
+        memPercent: typeof p?.memPercent === "number" ? p.memPercent : p?.memPercent === null ? null : undefined
       }))
     : undefined;
 
@@ -174,7 +205,19 @@ function parseAgentSnapshot(payload: unknown): {
 
   const dockerError = typeof docker?.error === "string" ? docker.error : undefined;
 
-  return { cpuLoad, memUsed, memTotal, disk, topProcesses, containers, containerStats, dockerError };
+  return {
+    cpuLoad,
+    memUsed,
+    memTotal,
+    disk,
+    processesTop,
+    processesTopCpu,
+    processesTopMem,
+    topProcesses,
+    containers,
+    containerStats,
+    dockerError
+  };
 }
 
 export default function ServerDetailPage() {
@@ -938,34 +981,76 @@ export default function ServerDetailPage() {
             </div>
           </div>
 
-          {!latestSnap?.topProcesses?.length ? (
-            <div className="px-5 py-8 text-center text-sm text-slate-500">No process information available yet.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs font-medium text-slate-600">
-                  <tr>
-                    <th className="px-5 py-3">PID</th>
-                    <th className="px-5 py-3">Process</th>
-                    <th className="px-5 py-3">CPU</th>
-                    <th className="px-5 py-3">Memory</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {latestSnap.topProcesses.map((p, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50">
-                      <td className="px-5 py-3 text-slate-600">{p.pid ?? "—"}</td>
-                      <td className="px-5 py-3">
-                        <div className="font-medium text-slate-900">{p.name ?? "—"}</div>
-                      </td>
-                      <td className="px-5 py-3 text-slate-600">{formatPct(p.cpu)}</td>
-                      <td className="px-5 py-3 text-slate-600">{formatPct(p.mem)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {(() => {
+            const list =
+              latestSnap?.processesTop?.length
+                ? latestSnap.processesTop
+                : latestSnap?.processesTopCpu?.length
+                  ? latestSnap.processesTopCpu
+                  : null;
+
+            if (list) {
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-xs font-medium text-slate-600">
+                      <tr>
+                        <th className="px-5 py-3">PID</th>
+                        <th className="px-5 py-3">Process</th>
+                        <th className="px-5 py-3">CPU</th>
+                        <th className="px-5 py-3">Memory</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {list.map((p, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="px-5 py-3 text-slate-600">{p.pid ?? "—"}</td>
+                          <td className="px-5 py-3">
+                            <div className="font-medium text-slate-900">{p.name ?? "—"}</div>
+                          </td>
+                          <td className="px-5 py-3 text-slate-600">{formatPct(typeof p.cpuPercent === "number" ? p.cpuPercent : 0)}</td>
+                          <td className="px-5 py-3 text-slate-600">{formatPct(typeof p.memPercent === "number" ? p.memPercent : 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            }
+
+            if (latestSnap?.topProcesses?.length) {
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-xs font-medium text-slate-600">
+                      <tr>
+                        <th className="px-5 py-3">PID</th>
+                        <th className="px-5 py-3">Process</th>
+                        <th className="px-5 py-3">CPU</th>
+                        <th className="px-5 py-3">Memory</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {latestSnap.topProcesses.map((p, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="px-5 py-3 text-slate-600">{p.pid ?? "—"}</td>
+                          <td className="px-5 py-3">
+                            <div className="font-medium text-slate-900">{p.name ?? "—"}</div>
+                          </td>
+                          <td className="px-5 py-3 text-slate-600">{formatPct(p.cpu)}</td>
+                          <td className="px-5 py-3 text-slate-600">{formatPct(p.mem)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            }
+
+            return (
+              <div className="px-5 py-8 text-center text-sm text-slate-500">No process information available yet.</div>
+            );
+          })()}
         </div>
       )}
     </div>
