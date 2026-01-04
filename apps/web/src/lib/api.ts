@@ -419,6 +419,9 @@ export const api = {
       }
     ),
 
+  adminDeleteServer: (params: { id: string }) =>
+    apiDelete<{ ok: boolean }>(`/admin/servers/${encodeURIComponent(params.id)}`),
+
   adminProbeServer: (params: { id: string }) => apiPost<SshProbeResult>(`/admin/servers/${encodeURIComponent(params.id)}/probe`, {}),
 
   // User management

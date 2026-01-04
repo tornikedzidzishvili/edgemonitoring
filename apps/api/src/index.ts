@@ -784,6 +784,23 @@ app.patch("/admin/servers/:id", async (req) => {
   };
 });
 
+// Admin: delete server (keeps webapps, just detaches them)
+app.delete("/admin/servers/:id", async (req) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+
+  const server = await prisma.server.findUnique({ where: { id: params.id } });
+  if (!server) throw app.httpErrors.notFound("server-not-found");
+
+  await prisma.$transaction([
+    prisma.webApp.updateMany({ where: { serverId: server.id }, data: { serverId: null } }),
+    prisma.serverReport.deleteMany({ where: { serverId: server.id } }),
+    prisma.serverMetricMinute.deleteMany({ where: { serverId: server.id } }),
+    prisma.server.delete({ where: { id: server.id } })
+  ]);
+
+  return { ok: true };
+});
+
 // Admin: create SSH key (encrypted at rest; secret never returned)
 app.post("/admin/ssh-keys", async (req) => {
   const body = z

@@ -20,6 +20,7 @@ export type AgentPayload = {
       free: number;
     };
     disk: Array<{ fs: string; size: number; used: number; available: number; mount: string }>;
+    topProcesses?: Array<{ pid: number; name: string; cpu: number; mem: number }>;
   };
   docker: {
     containers: Array<{
@@ -111,33 +112,49 @@ function computeBlock(stats: DockerStats): { read?: number; write?: number } {
 }
 
 export async function collectSnapshot(dockerSocketPath: string): Promise<AgentPayload> {
-  const docker = new Docker({ socketPath: dockerSocketPath });
-
-  const [osInfo, currentLoad, mem, fsSize, dockerContainers] = await Promise.all([
+  const [osInfo, currentLoad, mem, fsSize, processes] = await Promise.all([
     si.osInfo(),
     si.currentLoad(),
     si.mem(),
     si.fsSize(),
-    docker.listContainers({ all: true })
+    si.processes()
   ]);
 
-  const containers = (dockerContainers as ContainerInfo[]).map((c) => ({
-    id: c.Id,
-    name: Array.isArray(c.Names) && c.Names.length ? c.Names[0].replace(/^\//, "") : c.Id.slice(0, 12),
-    image: c.Image,
-    state: c.State,
-    status: c.Status,
-    created: c.Created,
-    ports: (c.Ports ?? []).map((p) => {
-      const hp = p.PublicPort ? `${p.IP ?? "0.0.0.0"}:${p.PublicPort}` : "";
-      const cp = `${p.PrivatePort}/${p.Type}`;
-      return hp ? `${hp} -> ${cp}` : cp;
-    })
-  }));
+  const topProcesses: AgentPayload["system"]["topProcesses"] = Array.isArray(processes?.list)
+    ? processes.list
+        .slice()
+        .sort((a: any, b: any) => (Number(b?.cpu ?? 0) || 0) - (Number(a?.cpu ?? 0) || 0))
+        .slice(0, 5)
+        .map((p: any) => ({
+          pid: Number(p?.pid ?? 0) || 0,
+          name: String(p?.name ?? p?.command ?? "").slice(0, 120),
+          cpu: Number(p?.cpu ?? 0) || 0,
+          mem: Number(p?.mem ?? 0) || 0
+        }))
+        .filter((p) => p.pid > 0 && p.name)
+    : undefined;
 
+  let containers: AgentPayload["docker"]["containers"] = [];
   let dockerStats: AgentPayload["docker"]["stats"] = undefined;
   let dockerError: string | undefined;
+
   try {
+    const docker = new Docker({ socketPath: dockerSocketPath });
+    const dockerContainers = await docker.listContainers({ all: true });
+    containers = (dockerContainers as ContainerInfo[]).map((c) => ({
+      id: c.Id,
+      name: Array.isArray(c.Names) && c.Names.length ? c.Names[0].replace(/^\//, "") : c.Id.slice(0, 12),
+      image: c.Image,
+      state: c.State,
+      status: c.Status,
+      created: c.Created,
+      ports: (c.Ports ?? []).map((p) => {
+        const hp = p.PublicPort ? `${p.IP ?? "0.0.0.0"}:${p.PublicPort}` : "";
+        const cp = `${p.PrivatePort}/${p.Type}`;
+        return hp ? `${hp} -> ${cp}` : cp;
+      })
+    }));
+
     dockerStats = await Promise.all(
       containers.map(async (c) => {
         try {
@@ -158,13 +175,13 @@ export async function collectSnapshot(dockerSocketPath: string): Promise<AgentPa
             blockReadBytes: blk.read,
             blockWriteBytes: blk.write
           };
-        } catch (e) {
+        } catch {
           return { id: c.id, name: c.name };
         }
       })
     );
   } catch (e) {
-    dockerError = e instanceof Error ? e.message : "docker-stats-failed";
+    dockerError = e instanceof Error ? e.message : "docker-collect-failed";
   }
 
   return {
@@ -191,7 +208,8 @@ export async function collectSnapshot(dockerSocketPath: string): Promise<AgentPa
         used: d.used,
         available: d.available,
         mount: d.mount
-      }))
+      })),
+      ...(topProcesses ? { topProcesses } : {})
     },
     docker: {
       containers,

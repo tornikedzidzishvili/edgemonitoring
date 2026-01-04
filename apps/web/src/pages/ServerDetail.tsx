@@ -102,6 +102,7 @@ function parseAgentSnapshot(payload: unknown): {
   memUsed?: number;
   memTotal?: number;
   disk?: Array<{ fs?: string; size?: number; used?: number; available?: number; mount?: string }>;
+  topProcesses?: Array<{ pid?: number; name?: string; cpu?: number; mem?: number }>;
   containers?: Array<{ name?: string; image?: string; state?: string; status?: string; ports?: string[] }>;
   containerStats?: Array<{
     id?: string;
@@ -137,6 +138,15 @@ function parseAgentSnapshot(payload: unknown): {
       }))
     : undefined;
 
+  const topProcesses = Array.isArray(system?.topProcesses)
+    ? system.topProcesses.map((p: any) => ({
+        pid: typeof p?.pid === "number" ? p.pid : undefined,
+        name: typeof p?.name === "string" ? p.name : undefined,
+        cpu: typeof p?.cpu === "number" ? p.cpu : undefined,
+        mem: typeof p?.mem === "number" ? p.mem : undefined
+      }))
+    : undefined;
+
   const containers = Array.isArray(docker?.containers)
     ? docker.containers.map((c: any) => ({
         name: c?.name,
@@ -164,7 +174,7 @@ function parseAgentSnapshot(payload: unknown): {
 
   const dockerError = typeof docker?.error === "string" ? docker.error : undefined;
 
-  return { cpuLoad, memUsed, memTotal, disk, containers, containerStats, dockerError };
+  return { cpuLoad, memUsed, memTotal, disk, topProcesses, containers, containerStats, dockerError };
 }
 
 export default function ServerDetailPage() {
@@ -347,8 +357,8 @@ export default function ServerDetailPage() {
 
   const monitorDocker = useMemo(() => {
     const specs = detail?.specs;
-    if (!specs || typeof specs !== "object") return false;
-    return (specs as any)?.monitorDocker === true;
+    if (!specs || typeof specs !== "object") return true;
+    return (specs as any)?.monitorDocker !== false;
   }, [detail?.specs]);
 
   const statsByName = useMemo(() => {
@@ -844,85 +854,120 @@ export default function ServerDetailPage() {
         )}
       </div>
 
-      {/* Docker Containers */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <div className="flex items-center justify-between">
-            <div className="font-medium">Docker Containers</div>
-            <div className="text-sm text-slate-500">{latestSnap?.containers?.length ?? 0} containers</div>
-          </div>
-        </div>
-
-        {!monitorDocker ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-500">
-            Docker monitoring is disabled for this server.
-          </div>
-        ) : latestSnap?.dockerError ? (
-          <div className="px-5 py-4">
-            <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              Docker error: {latestSnap.dockerError}
+      {monitorDocker ? (
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <div className="flex items-center justify-between">
+              <div className="font-medium">Docker Containers</div>
+              <div className="text-sm text-slate-500">{latestSnap?.containers?.length ?? 0} containers</div>
             </div>
           </div>
-        ) : !latestSnap?.containers?.length ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-500">No containers found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-medium text-slate-600">
-                <tr>
-                  <th className="px-5 py-3">Container</th>
-                  <th className="px-5 py-3">Image</th>
-                  <th className="px-5 py-3">State</th>
-                  <th className="px-5 py-3">CPU</th>
-                  <th className="px-5 py-3">Memory</th>
-                  <th className="px-5 py-3">Network I/O</th>
-                  <th className="px-5 py-3">Block I/O</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {latestSnap.containers.map((c, idx) => {
-                  const stats = statsByName.get(c.name ?? "");
-                  const stateColor =
-                    c.state === "running"
-                      ? "bg-emerald-100 text-emerald-800"
-                      : c.state === "exited"
-                        ? "bg-slate-100 text-slate-600"
-                        : "bg-amber-100 text-amber-800";
-                  return (
-                    <tr key={idx} className="hover:bg-slate-50">
-                      <td className="px-5 py-3">
-                        <div className="font-medium text-slate-900">{c.name ?? "—"}</div>
-                      </td>
-                      <td className="px-5 py-3 text-slate-600">
-                        <span className="max-w-[200px] truncate block">{c.image ?? "—"}</span>
-                      </td>
-                      <td className="px-5 py-3">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${stateColor}`}>
-                          {c.state ?? c.status ?? "—"}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-slate-600">{formatPct(stats?.cpuPercent)}</td>
-                      <td className="px-5 py-3 text-slate-600">
-                        {stats?.memPercent !== undefined
-                          ? formatPct(stats.memPercent)
-                          : `${formatBytes(stats?.memUsageBytes)} / ${formatBytes(stats?.memLimitBytes)}`}
-                      </td>
-                      <td className="px-5 py-3 text-slate-600">
-                        <span className="text-emerald-600">{formatBytes(stats?.netRxBytes)}</span>
-                        {" / "}
-                        <span className="text-blue-600">{formatBytes(stats?.netTxBytes)}</span>
-                      </td>
-                      <td className="px-5 py-3 text-slate-600">
-                        {formatBytes(stats?.blockReadBytes)} / {formatBytes(stats?.blockWriteBytes)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+
+          {latestSnap?.dockerError ? (
+            <div className="px-5 py-4">
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                Docker error: {latestSnap.dockerError}
+              </div>
+            </div>
+          ) : !latestSnap?.containers?.length ? (
+            <div className="px-5 py-8 text-center text-sm text-slate-500">No containers found.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs font-medium text-slate-600">
+                  <tr>
+                    <th className="px-5 py-3">Container</th>
+                    <th className="px-5 py-3">Image</th>
+                    <th className="px-5 py-3">State</th>
+                    <th className="px-5 py-3">CPU</th>
+                    <th className="px-5 py-3">Memory</th>
+                    <th className="px-5 py-3">Network I/O</th>
+                    <th className="px-5 py-3">Block I/O</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {latestSnap.containers.map((c, idx) => {
+                    const stats = statsByName.get(c.name ?? "");
+                    const stateColor =
+                      c.state === "running"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : c.state === "exited"
+                          ? "bg-slate-100 text-slate-600"
+                          : "bg-amber-100 text-amber-800";
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-5 py-3">
+                          <div className="font-medium text-slate-900">{c.name ?? "—"}</div>
+                        </td>
+                        <td className="px-5 py-3 text-slate-600">
+                          <span className="max-w-[200px] truncate block">{c.image ?? "—"}</span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${stateColor}`}>
+                            {c.state ?? c.status ?? "—"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-slate-600">{formatPct(stats?.cpuPercent)}</td>
+                        <td className="px-5 py-3 text-slate-600">
+                          {stats?.memPercent !== undefined
+                            ? formatPct(stats.memPercent)
+                            : `${formatBytes(stats?.memUsageBytes)} / ${formatBytes(stats?.memLimitBytes)}`}
+                        </td>
+                        <td className="px-5 py-3 text-slate-600">
+                          <span className="text-emerald-600">{formatBytes(stats?.netRxBytes)}</span>
+                          {" / "}
+                          <span className="text-blue-600">{formatBytes(stats?.netTxBytes)}</span>
+                        </td>
+                        <td className="px-5 py-3 text-slate-600">
+                          {formatBytes(stats?.blockReadBytes)} / {formatBytes(stats?.blockWriteBytes)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <div className="flex items-center justify-between">
+              <div className="font-medium">Top Processes</div>
+              <div className="text-sm text-slate-500">Top 5 by CPU</div>
+            </div>
           </div>
-        )}
-      </div>
+
+          {!latestSnap?.topProcesses?.length ? (
+            <div className="px-5 py-8 text-center text-sm text-slate-500">No process information available yet.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs font-medium text-slate-600">
+                  <tr>
+                    <th className="px-5 py-3">PID</th>
+                    <th className="px-5 py-3">Process</th>
+                    <th className="px-5 py-3">CPU</th>
+                    <th className="px-5 py-3">Memory</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {latestSnap.topProcesses.map((p, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="px-5 py-3 text-slate-600">{p.pid ?? "—"}</td>
+                      <td className="px-5 py-3">
+                        <div className="font-medium text-slate-900">{p.name ?? "—"}</div>
+                      </td>
+                      <td className="px-5 py-3 text-slate-600">{formatPct(p.cpu)}</td>
+                      <td className="px-5 py-3 text-slate-600">{formatPct(p.mem)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

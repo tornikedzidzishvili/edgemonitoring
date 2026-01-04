@@ -8,6 +8,18 @@ export default function Servers() {
   const [sshKeys, setSshKeys] = useState<SshKeyInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const [savingServerId, setSavingServerId] = useState<string | null>(null);
+  const [deletingServerId, setDeletingServerId] = useState<string | null>(null);
+  const [editingServerId, setEditingServerId] = useState<string | null>(null);
+
+  const [editName, setEditName] = useState("");
+  const [editIp, setEditIp] = useState("");
+  const [editVendor, setEditVendor] = useState("");
+  const [editSshUser, setEditSshUser] = useState("");
+  const [editSshPort, setEditSshPort] = useState("22");
+  const [editSshKeyId, setEditSshKeyId] = useState<string>("");
+  const [editMonitorDocker, setEditMonitorDocker] = useState(true);
+
   const [creatingKey, setCreatingKey] = useState(false);
   const [keyName, setKeyName] = useState("");
   const [keyUsername, setKeyUsername] = useState("");
@@ -141,6 +153,68 @@ export default function Servers() {
       setError(e instanceof Error ? e.message : "Probe failed");
     } finally {
       setProbingId(null);
+    }
+  }
+
+  function startEdit(s: ServerInfo) {
+    setError(null);
+    setEditingServerId(s.id);
+    setEditName(s.name ?? "");
+    setEditIp(s.ip ?? "");
+    setEditVendor(s.vendor ?? "");
+    setEditSshUser(s.sshUser ?? "");
+    setEditSshPort(s.sshPort ? String(s.sshPort) : "22");
+    setEditSshKeyId(s.sshKeyId ?? "");
+    const specs = (s.specs && typeof s.specs === "object") ? (s.specs as any) : {};
+    setEditMonitorDocker(specs?.monitorDocker !== false);
+  }
+
+  function cancelEdit() {
+    setEditingServerId(null);
+  }
+
+  async function onSaveEdit() {
+    if (!editingServerId) return;
+    setError(null);
+    setSavingServerId(editingServerId);
+    try {
+      const current = servers.find((s) => s.id === editingServerId);
+      const existingSpecs = (current?.specs && typeof current.specs === "object") ? (current.specs as any) : {};
+      await api.adminUpdateServer({
+        id: editingServerId,
+        name: editName,
+        ip: editIp ? editIp : null,
+        vendor: editVendor ? editVendor : null,
+        sshUser: editSshUser ? editSshUser : null,
+        sshPort: editSshPort ? Number(editSshPort) : null,
+        sshKeyId: editSshKeyId ? editSshKeyId : null,
+        specs: { ...existingSpecs, monitorDocker: editMonitorDocker }
+      });
+      await refreshServers();
+      setEditingServerId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update server");
+    } finally {
+      setSavingServerId(null);
+    }
+  }
+
+  async function onDeleteServer(serverId: string) {
+    const s = servers.find((x) => x.id === serverId);
+    const name = s?.name ?? serverId;
+    const ok = window.confirm(`Delete server "${name}"? This cannot be undone.`);
+    if (!ok) return;
+
+    setError(null);
+    setDeletingServerId(serverId);
+    try {
+      await api.adminDeleteServer({ id: serverId });
+      if (editingServerId === serverId) setEditingServerId(null);
+      await refreshServers();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete server");
+    } finally {
+      setDeletingServerId(null);
     }
   }
 
@@ -354,20 +428,72 @@ export default function Servers() {
               <th className="px-4 py-3">Last seen</th>
               <th className="px-4 py-3">Probe</th>
               <th className="px-4 py-3">Agent key</th>
+              <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {servers.map((s) => (
               <tr key={s.id} className="border-t border-slate-200">
                 <td className="px-4 py-3">
-                  <Link to={`/servers/${s.id}`} className="font-medium text-slate-900 hover:underline">
-                    {s.name}
-                  </Link>
+                  {editingServerId === s.id ? (
+                    <input
+                      className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      aria-label="Server name"
+                      placeholder="Server name"
+                      required
+                    />
+                  ) : (
+                    <Link to={`/servers/${s.id}`} className="font-medium text-slate-900 hover:underline">
+                      {s.name}
+                    </Link>
+                  )}
                   <div className="text-xs text-slate-500">{s.id}</div>
                 </td>
-                <td className="px-4 py-3">{s.ip ?? "—"}</td>
-                <td className="px-4 py-3">{s.vendor ?? "—"}</td>
-                <td className="px-4 py-3">{s.sshKeyId ? s.sshKeyId.slice(0, 8) + "…" : "—"}</td>
+                <td className="px-4 py-3">
+                  {editingServerId === s.id ? (
+                    <input
+                      className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
+                      value={editIp}
+                      onChange={(e) => setEditIp(e.target.value)}
+                      placeholder="(optional)"
+                    />
+                  ) : (
+                    (s.ip ?? "—")
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {editingServerId === s.id ? (
+                    <input
+                      className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
+                      value={editVendor}
+                      onChange={(e) => setEditVendor(e.target.value)}
+                      placeholder="(optional)"
+                    />
+                  ) : (
+                    (s.vendor ?? "—")
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {editingServerId === s.id ? (
+                    <select
+                      className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
+                      value={editSshKeyId}
+                      onChange={(e) => setEditSshKeyId(e.target.value)}
+                      aria-label="SSH key"
+                    >
+                      <option value="">(none)</option>
+                      {sshKeyOptions.map((k) => (
+                        <option key={k.id} value={k.id}>
+                          {k.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    (s.sshKeyId ? s.sshKeyId.slice(0, 8) + "…" : "—")
+                  )}
+                </td>
                 <td className="px-4 py-3">{formatDateTime(s.lastSeenAt)}</td>
                 <td className="px-4 py-3">
                   <button
@@ -389,11 +515,77 @@ export default function Servers() {
                     {generatingKeyFor === s.id ? "Generating…" : "Generate"}
                   </button>
                 </td>
+                <td className="px-4 py-3">
+                  {editingServerId === s.id ? (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
+                          value={editSshUser}
+                          onChange={(e) => setEditSshUser(e.target.value)}
+                          placeholder="SSH user"
+                        />
+                        <input
+                          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm"
+                          value={editSshPort}
+                          onChange={(e) => setEditSshPort(e.target.value)}
+                          inputMode="numeric"
+                          placeholder="22"
+                        />
+                      </div>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300"
+                          checked={editMonitorDocker}
+                          onChange={(e) => setEditMonitorDocker(e.target.checked)}
+                        />
+                        <span className="text-xs text-slate-700">Monitor Docker</span>
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onSaveEdit()}
+                          disabled={savingServerId === s.id}
+                          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+                        >
+                          {savingServerId === s.id ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => cancelEdit()}
+                          disabled={savingServerId === s.id}
+                          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(s)}
+                        className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 hover:bg-slate-50"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteServer(s.id)}
+                        disabled={deletingServerId === s.id}
+                        className="rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                      >
+                        {deletingServerId === s.id ? "Deleting…" : "Delete"}
+                      </button>
+                    </div>
+                  )}
+                </td>
               </tr>
             ))}
             {servers.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-sm text-slate-600" colSpan={6}>
+                <td className="px-4 py-6 text-sm text-slate-600" colSpan={8}>
                   No servers yet.
                 </td>
               </tr>
