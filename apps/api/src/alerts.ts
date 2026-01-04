@@ -12,6 +12,14 @@ type AlertVars = {
   error: string;
 };
 
+function formatUtcMinute(d: Date): string {
+  // 2026-01-04 13:45 UTC
+  const iso = d.toISOString();
+  const yyyyMmDd = iso.slice(0, 10);
+  const hhMm = iso.slice(11, 16);
+  return `${yyyyMmDd} ${hhMm} UTC`;
+}
+
 function renderTemplate(template: string, vars: AlertVars): string {
   return template.replace(/\{\{\s*(name|url|time|httpStatus|error)\s*\}\}/g, (_m, key: keyof AlertVars) => {
     const v = vars[key];
@@ -127,7 +135,7 @@ export async function sendWebAppDownAlerts(
   const vars: AlertVars = {
     name: webApp.name,
     url: webApp.url,
-    time: new Date().toISOString(),
+    time: formatUtcMinute(new Date()),
     httpStatus: params.httpStatus != null ? String(params.httpStatus) : "-",
     error: params.error ?? "-"
   };
@@ -172,7 +180,7 @@ export async function sendTestAlerts(
   const vars: AlertVars = {
     name: "TEST",
     url: "-",
-    time: new Date().toISOString(),
+    time: formatUtcMinute(new Date()),
     httpStatus: "-",
     error: "test"
   };

@@ -29,6 +29,16 @@ export default function SmtpSettings() {
         setUsername(data.settings.username || "");
         setFromEmail(data.settings.fromEmail);
         setFromName(data.settings.fromName || "");
+      } else {
+        // Mailgun-friendly defaults
+        setSettings(null);
+        setHost("smtp.mailgun.org");
+        setPort("587");
+        setSecure(true);
+        setUsername("");
+        setPassword("");
+        setFromEmail("");
+        setFromName("");
       }
       setError("");
     } catch (err) {
@@ -77,7 +87,8 @@ export default function SmtpSettings() {
     try {
       await api.deleteSmtpSettings();
       setSettings(null);
-      setHost("");
+      // Mailgun-friendly defaults
+      setHost("smtp.mailgun.org");
       setPort("587");
       setSecure(true);
       setUsername("");
@@ -135,9 +146,12 @@ export default function SmtpSettings() {
               value={host}
               onChange={(e) => setHost(e.target.value)}
               required
-              placeholder="smtp.example.com"
+              placeholder="smtp.mailgun.org"
               className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
             />
+            <p className="mt-2 text-xs text-slate-500">
+              Mailgun default: <span className="font-medium">smtp.mailgun.org</span>
+            </p>
           </div>
 
           <div>
@@ -154,17 +168,21 @@ export default function SmtpSettings() {
               max={65535}
               className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
             />
+            <p className="mt-2 text-xs text-slate-500">
+              Mailgun typically uses <span className="font-medium">587 (TLS)</span> or <span className="font-medium">465 (SSL)</span>.
+            </p>
           </div>
 
           <div>
             <label htmlFor="username" className="block text-sm font-medium text-slate-700">
-              Username <span className="text-slate-400">(optional)</span>
+              Username <span className="text-slate-400">(Mailgun: postmaster@YOUR_DOMAIN)</span>
             </label>
             <input
               id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              placeholder="postmaster@mg.example.com"
               className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
             />
           </div>
@@ -181,7 +199,7 @@ export default function SmtpSettings() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={settings?.hasPassword ? "Leave blank to keep current" : ""}
+              placeholder={settings?.hasPassword ? "Leave blank to keep current" : "Mailgun SMTP password"}
               className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
             />
           </div>
@@ -196,7 +214,7 @@ export default function SmtpSettings() {
               value={fromEmail}
               onChange={(e) => setFromEmail(e.target.value)}
               required
-              placeholder="noreply@example.com"
+              placeholder="alerts@mg.example.com"
               className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
             />
           </div>
@@ -225,7 +243,7 @@ export default function SmtpSettings() {
             className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
           />
           <label htmlFor="secure" className="text-sm text-slate-700">
-            Use TLS/SSL (recommended)
+            Use TLS (recommended)
           </label>
         </div>
 

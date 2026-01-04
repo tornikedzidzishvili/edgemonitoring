@@ -104,7 +104,7 @@ export default function TemplatesSettings() {
           <p className="mt-2 text-xs text-slate-500">
             Supported placeholders: <span className="font-medium">{"{{name}}"}</span>,{" "}
             <span className="font-medium">{"{{url}}"}</span>,{" "}
-            <span className="font-medium">{"{{time}}"}</span>,{" "}
+            <span className="font-medium">{"{{time}}"}</span> <span className="text-slate-400">(YYYY-MM-DD HH:MM UTC)</span>,{" "}
             <span className="font-medium">{"{{httpStatus}}"}</span>,{" "}
             <span className="font-medium">{"{{error}}"}</span>
           </p>
