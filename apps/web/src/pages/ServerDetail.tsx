@@ -464,11 +464,22 @@ export default function ServerDetailPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-3 flex sm:hidden">
+          <Link
+            to="/servers"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+            </svg>
+            Back to Servers
+          </Link>
+        </div>
         <div className="flex items-start gap-4">
           <ServerIcon isActive={isActive} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold text-slate-900">{detail?.name ?? "Loading..."}</h1>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <h1 className="text-lg font-semibold text-slate-900 sm:text-xl">{detail?.name ?? "Loading..."}</h1>
               {isActive ? (
                 <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
                   Online
@@ -480,7 +491,7 @@ export default function ServerDetailPage() {
               )}
               <ConnectionBadge status={connection} />
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500 sm:gap-x-4">
               {detail?.ip && <span>{detail.ip}</span>}
               {detail?.vendor && <span>{detail.vendor}</span>}
               <span>Uptime: {formatUptime(uptimeMs)}</span>
@@ -488,7 +499,7 @@ export default function ServerDetailPage() {
           </div>
           <Link
             to="/servers"
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="hidden shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:block"
           >
             Back to Servers
           </Link>
@@ -540,7 +551,7 @@ export default function ServerDetailPage() {
 
       {/* HTTP Endpoints Section */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="font-medium">HTTP Endpoints</div>
             <div className="text-xs text-slate-500">Monitor URLs and services running on this server</div>
@@ -548,7 +559,7 @@ export default function ServerDetailPage() {
           <button
             type="button"
             onClick={() => setShowAddEndpoint(!showAddEndpoint)}
-            className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+            className="w-full rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 sm:w-auto"
           >
             {showAddEndpoint ? "Cancel" : "Add Endpoint"}
           </button>
@@ -734,19 +745,19 @@ export default function ServerDetailPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-5 py-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div className="font-medium">CPU Load</div>
               <div className="text-xs text-slate-500">
                 {metricsLoading ? "Loading…" : `${metrics.length} points`} • {metricsDays}d • {metricsStepMinutes}m step
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <label className="text-xs font-medium text-slate-600">
-                Range
+            <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3">
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                <span>Range</span>
                 <select
                   value={metricsDays}
                   onChange={(e) => setMetricsDays(Number(e.target.value) as 1 | 5 | 15 | 30)}
-                  className="ml-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                  className="rounded-md border border-slate-200 bg-white py-1 pl-2 pr-8 text-xs"
                 >
                   <option value={1}>1 day</option>
                   <option value={5}>5 days</option>
@@ -754,12 +765,12 @@ export default function ServerDetailPage() {
                   <option value={30}>30 days</option>
                 </select>
               </label>
-              <label className="text-xs font-medium text-slate-600">
-                Interval
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                <span>Interval</span>
                 <select
                   value={metricsStepMinutes}
                   onChange={(e) => setMetricsStepMinutes(Number(e.target.value) as 5 | 15 | 30 | 60)}
-                  className="ml-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                  className="rounded-md border border-slate-200 bg-white py-1 pl-2 pr-8 text-xs"
                 >
                   <option value={5}>5 min</option>
                   <option value={15}>15 min</option>
@@ -767,7 +778,7 @@ export default function ServerDetailPage() {
                   <option value={60}>60 min</option>
                 </select>
               </label>
-              <div className="text-xs text-slate-500">Applies to CPU & Memory</div>
+              <div className="hidden text-xs text-slate-500 sm:block">Applies to CPU & Memory</div>
             </div>
           </div>
           <div className="p-5">
@@ -806,7 +817,7 @@ export default function ServerDetailPage() {
 
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-5 py-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div className="font-medium">Memory Usage</div>
               <div className="text-xs text-slate-500">
                 {formatBytes(latestSnap?.memUsed)} / {formatBytes(latestSnap?.memTotal)}
@@ -900,7 +911,7 @@ export default function ServerDetailPage() {
       {monitorDocker ? (
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-5 py-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div className="font-medium">Docker Containers</div>
               <div className="text-sm text-slate-500">{latestSnap?.containers?.length ?? 0} containers</div>
             </div>
@@ -975,7 +986,7 @@ export default function ServerDetailPage() {
       ) : (
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-5 py-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div className="font-medium">Top Processes</div>
               <div className="text-sm text-slate-500">Top 5 by CPU</div>
             </div>
