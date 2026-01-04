@@ -37,10 +37,18 @@ async function sendEmail(prisma: PrismaClient, to: string, subject: string, body
   const smtp = await prisma.smtpSettings.findFirst();
   if (!smtp) return;
 
+  // In UI/DB we store a single boolean that means "use TLS".
+  // Nodemailer has two distinct modes:
+  // - implicit TLS (SMTPS) via `secure: true` (usually port 465)
+  // - STARTTLS upgrade via `secure: false` + `requireTLS: true` (usually port 587)
+  const useTls = smtp.secure;
+  const implicitTls = useTls && smtp.port === 465;
+
   const transporter = nodemailer.createTransport({
     host: smtp.host,
     port: smtp.port,
-    secure: smtp.secure,
+    secure: implicitTls,
+    requireTLS: useTls && !implicitTls,
     auth:
       smtp.username && smtp.password
         ? {
