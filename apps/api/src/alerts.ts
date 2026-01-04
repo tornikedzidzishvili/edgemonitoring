@@ -12,6 +12,15 @@ type AlertVars = {
   error: string;
 };
 
+type ServerAlertVars = {
+  serverName: string;
+  alertType: string;
+  threshold: string;
+  actualValue: string;
+  time: string;
+  status: string;
+};
+
 function formatUtcMinute(d: Date): string {
   // 2026-01-04 13:45 UTC
   const iso = d.toISOString();
@@ -22,6 +31,13 @@ function formatUtcMinute(d: Date): string {
 
 function renderTemplate(template: string, vars: AlertVars): string {
   return template.replace(/\{\{\s*(name|url|time|httpStatus|error)\s*\}\}/g, (_m, key: keyof AlertVars) => {
+    const v = vars[key];
+    return typeof v === "string" ? v : "";
+  });
+}
+
+function renderServerAlertTemplate(template: string, vars: ServerAlertVars): string {
+  return template.replace(/\{\{\s*(serverName|alertType|threshold|actualValue|time|status)\s*\}\}/g, (_m, key: keyof ServerAlertVars) => {
     const v = vars[key];
     return typeof v === "string" ? v : "";
   });
@@ -216,4 +232,93 @@ export async function sendTestAlerts(
   }
 
   return result;
+}
+
+export async function sendServerAlertNotification(
+  prisma: PrismaClient,
+  env: Env,
+  params: {
+    alertId: string;
+    serverName: string;
+    alertType: "cpu" | "ram" | "offline";
+    thresholdValue: number | null;
+    actualValue: number | null;
+    isRepeat: boolean;
+  }
+): Promise<void> {
+  const recipients = await prisma.alertRecipient.findMany({
+    where: { method: { not: "none" } },
+    include: { user: true }
+  });
+
+  if (recipients.length === 0) return;
+
+  const alertTypeLabels: Record<string, string> = {
+    cpu: "CPU",
+    ram: "RAM",
+    offline: "Offline"
+  };
+
+  const formatThreshold = (type: string, value: number | null): string => {
+    if (value === null) return "-";
+    if (type === "offline") return `${value} min`;
+    return `${value}%`;
+  };
+
+  const formatActual = (type: string, value: number | null): string => {
+    if (value === null) return "-";
+    if (type === "offline") return "-";
+    return `${value}%`;
+  };
+
+  const vars: ServerAlertVars = {
+    serverName: params.serverName,
+    alertType: alertTypeLabels[params.alertType] || params.alertType,
+    threshold: formatThreshold(params.alertType, params.thresholdValue),
+    actualValue: formatActual(params.alertType, params.actualValue),
+    time: formatUtcMinute(new Date()),
+    status: params.isRepeat ? "STILL ACTIVE" : "TRIGGERED"
+  };
+
+  // Use hardcoded templates for server alerts (could be made configurable later)
+  const subject = renderServerAlertTemplate(
+    params.isRepeat
+      ? "Reminder: {{serverName}} - {{alertType}} Alert Still Active"
+      : "Alert: {{serverName}} - {{alertType}} {{status}}",
+    vars
+  );
+
+  const emailBody = renderServerAlertTemplate(
+    `Server Alert ${params.isRepeat ? "(Reminder)" : ""}\n\nServer: {{serverName}}\nAlert Type: {{alertType}}\nStatus: {{status}}\nThreshold: {{threshold}}\nActual: {{actualValue}}\nTime: {{time}}\n\nThis alert will repeat every 30 minutes until resolved.`,
+    vars
+  );
+
+  const smsBody = renderServerAlertTemplate(
+    params.isRepeat
+      ? "REMINDER: {{serverName}} {{alertType}} alert still active. {{threshold}} threshold"
+      : "ALERT: {{serverName}} {{alertType}} {{status}}. Threshold: {{threshold}}, Actual: {{actualValue}}",
+    vars
+  );
+
+  await Promise.all(
+    recipients.map(async (r) => {
+      const method = r.method;
+
+      if ((method === "email" || method === "both") && r.email) {
+        try {
+          await sendEmail(prisma, r.email, subject, emailBody);
+        } catch {
+          // Non-fatal
+        }
+      }
+
+      if ((method === "sms" || method === "both") && r.phone) {
+        try {
+          await sendSms(prisma, env, r.phone, smsBody);
+        } catch {
+          // Non-fatal
+        }
+      }
+    })
+  );
 }

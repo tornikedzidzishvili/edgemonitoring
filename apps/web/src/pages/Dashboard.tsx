@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { motion } from "framer-motion";
-import { api, type DashboardRange, type DashboardResponse } from "../lib/api";
+import { api, type DashboardRange, type DashboardResponse, type AlertCountResponse } from "../lib/api";
 import { formatDateTime, formatMs } from "../lib/format";
 
 function formatCompactTime(iso: string): string {
@@ -63,6 +63,7 @@ const itemVariants = {
 export default function Dashboard() {
   const [range, setRange] = useState<DashboardRange>("24h");
   const [data, setData] = useState<DashboardResponse | null>(null);
+  const [alertCount, setAlertCount] = useState<AlertCountResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const refreshingRef = useRef(false);
@@ -71,8 +72,12 @@ export default function Dashboard() {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
     try {
-      const res = await api.dashboard(nextRange);
+      const [res, alerts] = await Promise.all([
+        api.dashboard(nextRange),
+        api.alertCount()
+      ]);
       setData(res);
+      setAlertCount(alerts);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -188,7 +193,7 @@ export default function Dashboard() {
 
       {/* Stats Cards */}
       <motion.div
-        className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4"
+        className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5"
         variants={containerVariants}
       >
         {/* Servers Card */}
@@ -303,6 +308,51 @@ export default function Dashboard() {
           </div>
           <div className="mt-1 text-xs text-slate-500">Recent failures</div>
         </motion.div>
+
+        {/* Server Alerts Card */}
+        <Link to="/alerts" className="block">
+          <motion.div
+            className={`rounded-xl border p-4 shadow-sm transition-all hover:shadow-md sm:p-5 ${
+              (alertCount?.activeCount ?? 0) > 0
+                ? "border-amber-300 bg-amber-50"
+                : "border-slate-200 bg-white"
+            }`}
+            variants={itemVariants}
+            whileHover="hover"
+            initial="rest"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-medium text-slate-600 sm:text-sm">Server Alerts</div>
+              <div className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors sm:h-8 sm:w-8 ${
+                (alertCount?.activeCount ?? 0) > 0
+                  ? "bg-amber-200 text-amber-700"
+                  : "bg-slate-100 text-slate-400"
+              }`}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 sm:h-4 sm:w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2 sm:mt-3">
+              <span className={`text-2xl font-bold sm:text-3xl ${
+                (alertCount?.activeCount ?? 0) > 0 ? "text-amber-700" : "text-slate-400"
+              }`}>
+                {alertCount?.activeCount ?? 0}
+              </span>
+            </div>
+            <div className="mt-1 text-xs text-slate-500">
+              {(alertCount?.activeCount ?? 0) > 0 ? (
+                <>
+                  <span className="text-orange-600">{alertCount?.byType.cpu ?? 0}</span> CPU,{" "}
+                  <span className="text-purple-600">{alertCount?.byType.ram ?? 0}</span> RAM,{" "}
+                  <span className="text-slate-600">{alertCount?.byType.offline ?? 0}</span> Offline
+                </>
+              ) : (
+                "No active alerts"
+              )}
+            </div>
+          </motion.div>
+        </Link>
       </motion.div>
 
       {/* Main Content Grid */}

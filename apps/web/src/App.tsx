@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import ServersDashboard from "./pages/ServersDashboard";
 import ServersManage from "./pages/Servers";
 import ServerDetail from "./pages/ServerDetail";
+import Alerts from "./pages/Alerts";
 import SharedHosting from "./pages/SharedHosting";
 import SharedHostingDetail from "./pages/SharedHostingDetail";
 import Settings from "./pages/Settings";
@@ -37,6 +38,7 @@ function AppRoutes() {
         <Route path="/servers" element={<ServersDashboard />} />
         <Route path="/servers/manage" element={<ServersManage />} />
         <Route path="/servers/:id" element={<ServerDetail />} />
+        <Route path="/alerts" element={<Alerts />} />
         <Route path="/shared-hosting" element={<SharedHosting />} />
         <Route path="/shared-hosting/:id" element={<SharedHostingDetail />} />
         <Route path="/settings" element={<Settings />} />

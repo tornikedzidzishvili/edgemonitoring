@@ -247,6 +247,71 @@ export type TestAlertsResponse = {
   };
 };
 
+// Server Alert Types
+export type ServerAlertSettingsInfo = {
+  id: string;
+  cpuThresholdPct: number;
+  cpuDurationMin: number;
+  ramThresholdPct: number;
+  ramDurationMin: number;
+  offlineTimeoutMin: number;
+  updatedAt: string;
+};
+
+export type ServerAlertSettingsResponse = {
+  settings: ServerAlertSettingsInfo;
+};
+
+export type ServerAlertConfigInfo = {
+  alertingEnabled: boolean;
+  cpuThresholdPct: number | null;
+  cpuDurationMin: number | null;
+  ramThresholdPct: number | null;
+  ramDurationMin: number | null;
+  offlineTimeoutMin: number | null;
+  effectiveSettings: {
+    cpuThresholdPct: number;
+    cpuDurationMin: number;
+    ramThresholdPct: number;
+    ramDurationMin: number;
+    offlineTimeoutMin: number;
+  };
+};
+
+export type ServerAlertInfo = {
+  id: string;
+  server: { id: string; name: string };
+  type: "cpu" | "ram" | "offline";
+  thresholdValue: number | null;
+  actualValue: number | null;
+  status: "active" | "resolved";
+  triggeredAt: string;
+  resolvedAt: string | null;
+  resolvedBy: { id: string; fullName: string } | null;
+  duration: number;
+  lastNotifiedAt: string | null;
+  notificationCount: number;
+};
+
+export type AlertsResponse = {
+  alerts: ServerAlertInfo[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type AlertCountResponse = {
+  activeCount: number;
+  byType: {
+    cpu: number;
+    ram: number;
+    offline: number;
+  };
+};
+
 export type SslStatus = "valid" | "warning" | "critical" | "unknown";
 
 export type SharedHostingSummary = {
@@ -481,5 +546,44 @@ export const api = {
   adminDeleteDomain: (sharedHostingId: string, domainId: string) =>
     apiDelete<{ ok: boolean }>(
       `/admin/shared-hosting/${encodeURIComponent(sharedHostingId)}/domains/${encodeURIComponent(domainId)}`
-    )
+    ),
+
+  // Server Alert Settings
+  serverAlertSettings: () => apiGet<ServerAlertSettingsResponse>(`/settings/server-alerts`),
+  saveServerAlertSettings: (params: {
+    cpuThresholdPct?: number;
+    cpuDurationMin?: number;
+    ramThresholdPct?: number;
+    ramDurationMin?: number;
+    offlineTimeoutMin?: number;
+  }) => apiPost<ServerAlertSettingsResponse>(`/settings/server-alerts`, params),
+
+  // Server Alert Config (per-server)
+  serverAlertConfig: (serverId: string) =>
+    apiGet<ServerAlertConfigInfo>(`/servers/${encodeURIComponent(serverId)}/alert-config`),
+  saveServerAlertConfig: (
+    serverId: string,
+    params: {
+      alertingEnabled?: boolean;
+      cpuThresholdPct?: number | null;
+      cpuDurationMin?: number | null;
+      ramThresholdPct?: number | null;
+      ramDurationMin?: number | null;
+      offlineTimeoutMin?: number | null;
+    }
+  ) => apiPost<ServerAlertConfigInfo>(`/servers/${encodeURIComponent(serverId)}/alert-config`, params),
+
+  // Alerts
+  alerts: (params?: { page?: number; limit?: number; status?: "active" | "resolved" | "all"; serverId?: string; type?: "cpu" | "ram" | "offline" }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set("page", String(params.page));
+    if (params?.limit) searchParams.set("limit", String(params.limit));
+    if (params?.status) searchParams.set("status", params.status);
+    if (params?.serverId) searchParams.set("serverId", params.serverId);
+    if (params?.type) searchParams.set("type", params.type);
+    const qs = searchParams.toString();
+    return apiGet<AlertsResponse>(`/alerts${qs ? `?${qs}` : ""}`);
+  },
+  alertCount: () => apiGet<AlertCountResponse>(`/alerts/count`),
+  resolveAlert: (alertId: string) => apiPost<{ ok: boolean }>(`/alerts/${encodeURIComponent(alertId)}/resolve`, {})
 };

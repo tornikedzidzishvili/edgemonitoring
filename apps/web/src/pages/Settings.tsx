@@ -4,14 +4,16 @@ import SmtpSettings from "../components/settings/SmtpSettings";
 import SmsSettings from "../components/settings/SmsSettings";
 import AlertsSettings from "../components/settings/AlertsSettings";
 import TemplatesSettings from "../components/settings/TemplatesSettings";
+import ServerAlertSettings from "../components/settings/ServerAlertSettings";
 
-type Tab = "users" | "smtp" | "sms" | "alerts" | "templates";
+type Tab = "users" | "smtp" | "sms" | "alerts" | "server-alerts" | "templates";
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "users", label: "Users" },
   { id: "smtp", label: "SMTP" },
   { id: "sms", label: "SMS" },
   { id: "alerts", label: "Alerts" },
+  { id: "server-alerts", label: "Server Alerts" },
   { id: "templates", label: "Templates" }
 ];
 
@@ -47,6 +49,7 @@ export default function Settings() {
         {activeTab === "smtp" && <SmtpSettings />}
         {activeTab === "sms" && <SmsSettings />}
         {activeTab === "alerts" && <AlertsSettings />}
+        {activeTab === "server-alerts" && <ServerAlertSettings />}
         {activeTab === "templates" && <TemplatesSettings />}
       </div>
     </div>

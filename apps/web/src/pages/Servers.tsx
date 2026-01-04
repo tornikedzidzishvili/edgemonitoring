@@ -19,6 +19,7 @@ export default function Servers() {
   const [editSshPort, setEditSshPort] = useState("22");
   const [editSshKeyId, setEditSshKeyId] = useState<string>("");
   const [editMonitorDocker, setEditMonitorDocker] = useState(true);
+  const [editAlertingEnabled, setEditAlertingEnabled] = useState(false);
 
   const [creatingKey, setCreatingKey] = useState(false);
   const [keyName, setKeyName] = useState("");
@@ -156,7 +157,7 @@ export default function Servers() {
     }
   }
 
-  function startEdit(s: ServerInfo) {
+  async function startEdit(s: ServerInfo) {
     setError(null);
     setEditingServerId(s.id);
     setEditName(s.name ?? "");
@@ -167,6 +168,13 @@ export default function Servers() {
     setEditSshKeyId(s.sshKeyId ?? "");
     const specs = (s.specs && typeof s.specs === "object") ? (s.specs as any) : {};
     setEditMonitorDocker(specs?.monitorDocker !== false);
+    // Fetch alert config
+    try {
+      const alertConfig = await api.serverAlertConfig(s.id);
+      setEditAlertingEnabled(alertConfig.alertingEnabled);
+    } catch {
+      setEditAlertingEnabled(false);
+    }
   }
 
   function cancelEdit() {
@@ -190,6 +198,8 @@ export default function Servers() {
         sshKeyId: editSshKeyId ? editSshKeyId : null,
         specs: { ...existingSpecs, monitorDocker: editMonitorDocker }
       });
+      // Save alert config
+      await api.saveServerAlertConfig(editingServerId, { alertingEnabled: editAlertingEnabled });
       await refreshServers();
       setEditingServerId(null);
     } catch (e) {
@@ -541,6 +551,15 @@ export default function Servers() {
                           onChange={(e) => setEditMonitorDocker(e.target.checked)}
                         />
                         <span className="text-xs text-slate-700">Monitor Docker</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300"
+                          checked={editAlertingEnabled}
+                          onChange={(e) => setEditAlertingEnabled(e.target.checked)}
+                        />
+                        <span className="text-xs text-slate-700">Enable Alerting</span>
                       </label>
                       <div className="flex flex-wrap gap-2">
                         <button

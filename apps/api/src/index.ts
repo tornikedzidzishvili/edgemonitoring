@@ -13,7 +13,9 @@ import { decryptString, encryptString } from "./cryptoBox.js";
 import { authRoutes } from "./routes/auth.js";
 import { usersRoutes } from "./routes/users.js";
 import { settingsRoutes } from "./routes/settings.js";
+import { serverAlertsRoutes } from "./routes/serverAlerts.js";
 import { cleanExpiredSessions } from "./services/userAuth.js";
+import { startServerAlertScheduler } from "./serverAlertScheduler.js";
 
 const env = getEnv();
 const app = Fastify({ logger: true });
@@ -25,6 +27,7 @@ await app.register(sensible);
 await app.register(authRoutes);
 await app.register(usersRoutes);
 await app.register(settingsRoutes);
+await app.register(serverAlertsRoutes);
 
 // Clean expired sessions periodically (every hour)
 setInterval(() => {
@@ -1307,5 +1310,6 @@ app.delete("/admin/shared-hosting/:id/domains/:domainId", async (req) => {
 
 startUptimeScheduler(prisma, env);
 startDomainScheduler(prisma, env);
+startServerAlertScheduler(prisma, env);
 
 await app.listen({ port: env.PORT, host: "0.0.0.0" });

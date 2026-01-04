@@ -23,6 +23,8 @@ model Server {
   webApps      WebApp[]
   reports      ServerReport[]
   metricMinutes ServerMetricMinute[]
+  alertConfig  ServerAlertConfig?
+  alerts       ServerAlert[]
 }
 
 model ServerMetricMinute {
@@ -99,6 +101,7 @@ model User {
   updatedAt    DateTime  @updatedAt
   sessions     Session[]
   alertRecipient AlertRecipient?
+  resolvedAlerts ServerAlert[]
 }
 
 model Session {
@@ -209,4 +212,51 @@ model DomainCheckResult {
   ipChanged       Boolean  @default(false)
 
   @@index([domainId, checkedAt])
+}
+
+// Global alerting threshold settings (singleton)
+model ServerAlertSettings {
+  id                String   @id @default(cuid())
+  cpuThresholdPct   Int      @default(90)
+  cpuDurationMin    Int      @default(5)
+  ramThresholdPct   Int      @default(90)
+  ramDurationMin    Int      @default(5)
+  offlineTimeoutMin Int      @default(3)
+  updatedAt         DateTime @updatedAt
+}
+
+// Per-server alerting configuration
+model ServerAlertConfig {
+  id                String   @id @default(cuid())
+  serverId          String   @unique
+  server            Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  alertingEnabled   Boolean  @default(false)
+  // Custom thresholds (null = use global)
+  cpuThresholdPct   Int?
+  cpuDurationMin    Int?
+  ramThresholdPct   Int?
+  ramDurationMin    Int?
+  offlineTimeoutMin Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// Active and historical alerts
+model ServerAlert {
+  id                String    @id @default(cuid())
+  serverId          String
+  server            Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  type              String    // "cpu" | "ram" | "offline"
+  thresholdValue    Float?
+  actualValue       Float?
+  status            String    @default("active") // "active" | "resolved"
+  triggeredAt       DateTime  @default(now())
+  resolvedAt        DateTime?
+  resolvedById      String?
+  resolvedBy        User?     @relation(fields: [resolvedById], references: [id])
+  lastNotifiedAt    DateTime?
+  notificationCount Int       @default(0)
+
+  @@index([serverId, status])
+  @@index([status, triggeredAt])
 }
