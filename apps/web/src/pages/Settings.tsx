@@ -23,13 +23,14 @@ export default function Settings() {
       <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
 
       <div className="mt-6 border-b border-slate-200">
-        <nav className="-mb-px flex gap-4">
-          {tabs.map((tab) => (
+        <nav className="-mb-px flex overflow-x-auto scrollbar-hide">
+          {tabs.map((tab, index) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={[
-                "border-b-2 px-1 pb-3 text-sm font-medium transition-colors",
+                "shrink-0 border-b-2 px-3 pb-3 text-sm font-medium transition-colors sm:px-4",
+                index > 0 ? "ml-4 sm:ml-6" : "",
                 activeTab === tab.id
                   ? "border-slate-900 text-slate-900"
                   : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"

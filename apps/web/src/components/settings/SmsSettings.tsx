@@ -74,7 +74,7 @@ export default function SmsSettings() {
       {success && <div className="mt-4 rounded-md bg-green-50 p-3 text-sm text-green-700">{success}</div>}
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-6">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center space-x-2">
           <input
             id="smsEnabled"
             type="checkbox"

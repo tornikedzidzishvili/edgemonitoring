@@ -148,7 +148,7 @@ export default function AlertsSettings() {
             id="alertUser"
             value={userId}
             onChange={(e) => loadUserIntoForm(e.target.value)}
-            className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className="mt-1 block w-full rounded-md border border-slate-300 py-2 pl-3 pr-10 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
           >
             <option value="">Select a user…</option>
             {users.map((u) => (
@@ -197,7 +197,7 @@ export default function AlertsSettings() {
             id="alertMethod"
             value={method}
             onChange={(e) => setMethod(e.target.value as Method)}
-            className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className="mt-1 block w-full rounded-md border border-slate-300 py-2 pl-3 pr-10 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
           >
             <option value="none">None</option>
             <option value="email">Email</option>
@@ -206,7 +206,7 @@ export default function AlertsSettings() {
           </select>
         </div>
 
-        <div className="flex justify-end gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={handleTest}
@@ -227,37 +227,41 @@ export default function AlertsSettings() {
 
       <div className="mt-10">
         <h3 className="text-sm font-semibold text-slate-900">Configured Recipients</h3>
-        <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
-          <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">User</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Email</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Phone</th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Method</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
-              {recipients.map((r) => (
-                <tr key={r.id}>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <div className="font-medium text-slate-900">{r.user.fullName}</div>
-                    <div className="text-sm text-slate-500">{r.user.email}</div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">{r.email || "-"}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">{r.phone || "-"}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">{r.method}</td>
-                </tr>
-              ))}
-              {recipients.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">
-                    No alert recipients configured
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="-mx-4 mt-3 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <div className="inline-block min-w-full align-middle">
+            <div className="overflow-hidden rounded-lg border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">User</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Email</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Phone</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Method</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {recipients.map((r) => (
+                    <tr key={r.id}>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <div className="font-medium text-slate-900">{r.user.fullName}</div>
+                        <div className="text-sm text-slate-500">{r.user.email}</div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">{r.email || "-"}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">{r.phone || "-"}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">{r.method}</td>
+                    </tr>
+                  ))}
+                  {recipients.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">
+                        No alert recipients configured
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
