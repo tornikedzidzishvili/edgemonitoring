@@ -9,6 +9,7 @@ export default function SmsSettings() {
   const [success, setSuccess] = useState("");
 
   const [enabled, setEnabled] = useState(false);
+  const [senderName, setSenderName] = useState("smsoffice");
   const [apiKey, setApiKey] = useState("");
 
   const fetchSettings = async () => {
@@ -18,9 +19,11 @@ export default function SmsSettings() {
       if (data.settings) {
         setSettings(data.settings);
         setEnabled(data.settings.enabled);
+        setSenderName(data.settings.senderName || "smsoffice");
       } else {
         setSettings(null);
         setEnabled(false);
+        setSenderName("smsoffice");
       }
       setError("");
     } catch (err) {
@@ -43,6 +46,7 @@ export default function SmsSettings() {
     try {
       const data = await api.saveSmsSettings({
         enabled,
+        senderName: senderName ? senderName : null,
         apiKey: apiKey ? apiKey : undefined
       });
       setSettings(data.settings);
@@ -81,6 +85,23 @@ export default function SmsSettings() {
           <label htmlFor="smsEnabled" className="text-sm text-slate-700">
             Enable SMS
           </label>
+        </div>
+
+        <div>
+          <label htmlFor="smsSender" className="block text-sm font-medium text-slate-700">
+            Sender Name
+          </label>
+          <input
+            id="smsSender"
+            type="text"
+            value={senderName}
+            onChange={(e) => setSenderName(e.target.value)}
+            placeholder="smsoffice"
+            className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+          />
+          <p className="mt-2 text-xs text-slate-500">
+            Sent to SMS Office as <span className="font-medium">sender=</span> in the POST form.
+          </p>
         </div>
 
         <div>

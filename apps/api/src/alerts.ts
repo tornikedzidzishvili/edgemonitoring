@@ -70,7 +70,7 @@ async function sendSms(prisma: PrismaClient, env: Env, destination: string, cont
   const form = new URLSearchParams({
     key: apiKey,
     destination,
-    sender: "smsoffice",
+    sender: settings.senderName || "smsoffice",
     content,
     urgent: "true"
   });
@@ -149,4 +149,55 @@ export async function sendWebAppDownAlerts(
       }
     })
   );
+}
+
+export async function sendTestAlerts(
+  prisma: PrismaClient,
+  env: Env,
+  params: { email?: string | null; phone?: string | null }
+): Promise<{
+  email: { attempted: boolean; sent: boolean; error?: string };
+  sms: { attempted: boolean; sent: boolean; error?: string };
+}> {
+  const template = await getOrCreateAlertTemplate(prisma);
+
+  const vars: AlertVars = {
+    name: "TEST",
+    url: "-",
+    time: new Date().toISOString(),
+    httpStatus: "-",
+    error: "test"
+  };
+
+  const subject = renderTemplate(template.emailSubject, vars);
+  const emailBody = renderTemplate(template.emailBody, vars);
+  const smsBody = renderTemplate(template.smsBody, vars);
+
+  const emailAttempted = !!params.email;
+  const smsAttempted = !!params.phone;
+
+  const result = {
+    email: { attempted: emailAttempted, sent: false as boolean, error: undefined as string | undefined },
+    sms: { attempted: smsAttempted, sent: false as boolean, error: undefined as string | undefined }
+  };
+
+  if (emailAttempted) {
+    try {
+      await sendEmail(prisma, params.email!, subject, emailBody);
+      result.email.sent = true;
+    } catch (err) {
+      result.email.error = err instanceof Error ? err.message : "email-send-failed";
+    }
+  }
+
+  if (smsAttempted) {
+    try {
+      await sendSms(prisma, env, params.phone!, smsBody);
+      result.sms.sent = true;
+    } catch (err) {
+      result.sms.error = err instanceof Error ? err.message : "sms-send-failed";
+    }
+  }
+
+  return result;
 }

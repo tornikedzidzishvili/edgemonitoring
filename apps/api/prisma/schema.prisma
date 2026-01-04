@@ -129,6 +129,8 @@ model SmsSettings {
   id        String   @id @default(cuid())
   enabled   Boolean  @default(false)
 
+  senderName String?
+
   apiKeyEnc String?
   apiKeyIv  String?
   apiKeyTag String?

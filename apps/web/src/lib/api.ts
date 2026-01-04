@@ -204,6 +204,7 @@ export type SmtpSettingsResponse = {
 export type SmsSettingsInfo = {
   id: string;
   enabled: boolean;
+  senderName: string | null;
   hasApiKey: boolean;
   updatedAt: string;
 };
@@ -236,6 +237,14 @@ export type AlertTemplatesInfo = {
 
 export type AlertTemplatesResponse = {
   templates: AlertTemplatesInfo;
+};
+
+export type TestAlertsResponse = {
+  ok: boolean;
+  result: {
+    email: { attempted: boolean; sent: boolean; error?: string };
+    sms: { attempted: boolean; sent: boolean; error?: string };
+  };
 };
 
 export type SslStatus = "valid" | "warning" | "critical" | "unknown";
@@ -430,13 +439,15 @@ export const api = {
 
   // SMS settings
   smsSettings: () => apiGet<SmsSettingsResponse>(`/settings/sms`),
-  saveSmsSettings: (params: { enabled: boolean; apiKey?: string | null }) =>
+  saveSmsSettings: (params: { enabled: boolean; senderName?: string | null; apiKey?: string | null }) =>
     apiPost<{ settings: SmsSettingsInfo }>(`/settings/sms`, params),
 
   // Alerts
   alertRecipients: () => apiGet<AlertRecipientsResponse>(`/settings/alerts/recipients`),
   saveAlertRecipient: (params: { userId: string; email?: string | null; phone?: string | null; method: "none" | "email" | "sms" | "both" }) =>
     apiPost<{ recipient: AlertRecipientInfo }>(`/settings/alerts/recipients`, params),
+  testAlerts: (params: { email?: string | null; phone?: string | null }) =>
+    apiPost<TestAlertsResponse>(`/settings/alerts/test`, params),
   alertTemplates: () => apiGet<AlertTemplatesResponse>(`/settings/templates/alerts`),
   saveAlertTemplates: (params: { emailSubject: string; emailBody: string; smsBody: string }) =>
     apiPost<AlertTemplatesResponse>(`/settings/templates/alerts`, params),

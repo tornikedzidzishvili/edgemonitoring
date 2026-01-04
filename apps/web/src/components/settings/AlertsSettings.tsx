@@ -8,6 +8,7 @@ export default function AlertsSettings() {
   const [recipients, setRecipients] = useState<AlertRecipientInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -92,6 +93,38 @@ export default function AlertsSettings() {
     }
   };
 
+  const handleTest = async () => {
+    setError("");
+    setSuccess("");
+
+    const hasEmail = !!email;
+    const hasPhone = !!phone;
+    if (!hasEmail && !hasPhone) {
+      setError("Enter an email and/or phone to send a test");
+      return;
+    }
+
+    setTesting(true);
+    try {
+      const res = await api.testAlerts({
+        email: hasEmail ? email : null,
+        phone: hasPhone ? phone : null
+      });
+
+      const e = res.result.email;
+      const s = res.result.sms;
+
+      const parts: string[] = [];
+      if (e.attempted) parts.push(`Email: ${e.sent ? "sent" : e.error ? `failed (${e.error})` : "failed"}`);
+      if (s.attempted) parts.push(`SMS: ${s.sent ? "sent" : s.error ? `failed (${s.error})` : "failed"}`);
+      setSuccess(parts.length ? `Test notifications: ${parts.join(" | ")}` : "Test completed");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send test notifications");
+    } finally {
+      setTesting(false);
+    }
+  };
+
   if (loading) {
     return <div className="text-sm text-slate-500">Loading alert settings...</div>;
   }
@@ -173,7 +206,15 @@ export default function AlertsSettings() {
           </select>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={handleTest}
+            disabled={testing}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {testing ? "Sending..." : "Send Test"}
+          </button>
           <button
             type="submit"
             disabled={saving}

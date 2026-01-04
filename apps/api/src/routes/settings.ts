@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { encryptString } from "../cryptoBox.js";
 import { getEnv } from "../env.js";
+import { sendTestAlerts } from "../alerts.js";
 import { requireAdmin } from "../middleware/sessionAuth.js";
 
 export async function settingsRoutes(app: FastifyInstance) {
@@ -132,6 +133,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       settings: {
         id: settings.id,
         enabled: settings.enabled,
+        senderName: settings.senderName,
         hasApiKey: !!settings.apiKeyEnc,
         updatedAt: settings.updatedAt
       }
@@ -143,6 +145,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     const body = z
       .object({
         enabled: z.boolean().default(false),
+        senderName: z.string().min(1).nullable().optional(),
         apiKey: z.string().min(1).nullable().optional()
       })
       .parse(req.body);
@@ -151,12 +154,17 @@ export async function settingsRoutes(app: FastifyInstance) {
 
     const data: {
       enabled: boolean;
+      senderName?: string | null;
       apiKeyEnc?: string | null;
       apiKeyIv?: string | null;
       apiKeyTag?: string | null;
     } = {
       enabled: body.enabled
     };
+
+    if (body.senderName !== undefined) {
+      data.senderName = body.senderName;
+    }
 
     if (body.apiKey === null) {
       data.apiKeyEnc = null;
@@ -190,6 +198,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       settings: {
         id: settings.id,
         enabled: settings.enabled,
+        senderName: settings.senderName,
         hasApiKey: !!settings.apiKeyEnc,
         updatedAt: settings.updatedAt
       }
@@ -310,5 +319,25 @@ export async function settingsRoutes(app: FastifyInstance) {
         updatedAt: saved.updatedAt
       }
     };
+  });
+
+  // Send test alert notifications (admin only)
+  app.post("/settings/alerts/test", { preHandler: requireAdmin }, async (req, reply) => {
+    const body = z
+      .object({
+        email: z.string().email().nullable().optional(),
+        phone: z.string().min(3).nullable().optional()
+      })
+      .parse(req.body);
+
+    const email = body.email ?? null;
+    const phone = body.phone ?? null;
+
+    if (!email && !phone) {
+      return reply.status(400).send({ error: "missing-destination", message: "Provide email and/or phone" });
+    }
+
+    const result = await sendTestAlerts(prisma, env, { email, phone });
+    return { ok: true, result };
   });
 }
