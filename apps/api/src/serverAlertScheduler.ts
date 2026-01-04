@@ -152,18 +152,20 @@ async function checkRamAlert(
   const totalSamples = metrics.reduce((sum, m) => sum + m.samples, 0);
   if (totalSamples === 0) return;
 
-  const avgRam = metrics.reduce((sum, m) => sum + m.memUsedPctSum, 0) / totalSamples;
+  // memUsedPctSum stores available RAM %, so convert to used: 100 - available
+  const avgAvailableRam = metrics.reduce((sum, m) => sum + m.memUsedPctSum, 0) / totalSamples;
+  const avgUsedRam = 100 - avgAvailableRam;
 
   const existingAlert = server.alerts.find((a) => a.type === "ram" && a.status === "active");
 
-  if (avgRam >= settings.ramThresholdPct) {
+  if (avgUsedRam >= settings.ramThresholdPct) {
     if (!existingAlert) {
       await createAlert(prisma, env, {
         serverId: server.id,
         serverName: server.name,
         type: "ram",
         thresholdValue: settings.ramThresholdPct,
-        actualValue: Math.round(avgRam * 10) / 10
+        actualValue: Math.round(avgUsedRam * 10) / 10
       });
     }
   } else if (existingAlert) {
