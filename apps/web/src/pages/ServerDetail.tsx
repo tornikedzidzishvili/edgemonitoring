@@ -253,6 +253,15 @@ export default function ServerDetailPage() {
   const [endpointUrl, setEndpointUrl] = useState("");
   const [savingEndpoint, setSavingEndpoint] = useState(false);
 
+  // Edit endpoint form
+  const [editingEndpoint, setEditingEndpoint] = useState<string | null>(null);
+  const [editEndpointName, setEditEndpointName] = useState("");
+  const [editEndpointUrl, setEditEndpointUrl] = useState("");
+  const [updatingEndpoint, setUpdatingEndpoint] = useState(false);
+
+  // Delete endpoint
+  const [deletingEndpoint, setDeletingEndpoint] = useState<string | null>(null);
+
   useEffect(() => {
     if (!serverId) return;
     api
@@ -455,6 +464,61 @@ export default function ServerDetailPage() {
       setError(err instanceof Error ? err.message : "Failed to add endpoint");
     } finally {
       setSavingEndpoint(false);
+    }
+  }
+
+  function handleStartEdit(endpoint: ServerEndpoint) {
+    setEditingEndpoint(endpoint.id);
+    setEditEndpointName(endpoint.name);
+    setEditEndpointUrl(endpoint.url);
+    setExpandedEndpoint(endpoint.id);
+  }
+
+  function handleCancelEdit() {
+    setEditingEndpoint(null);
+    setEditEndpointName("");
+    setEditEndpointUrl("");
+  }
+
+  async function handleUpdateEndpoint(e: React.FormEvent, endpointId: string) {
+    e.preventDefault();
+    if (!serverId) return;
+    setUpdatingEndpoint(true);
+    try {
+      await api.adminUpdateWebapp({
+        id: endpointId,
+        name: editEndpointName,
+        url: editEndpointUrl
+      });
+      setEditingEndpoint(null);
+      setEditEndpointName("");
+      setEditEndpointUrl("");
+      // Refresh endpoints
+      const res = await api.serverEndpoints(serverId);
+      setEndpoints(res.endpoints);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update endpoint");
+    } finally {
+      setUpdatingEndpoint(false);
+    }
+  }
+
+  async function handleDeleteEndpoint(endpointId: string) {
+    if (!serverId) return;
+    if (!confirm("Are you sure you want to delete this endpoint?")) return;
+    setDeletingEndpoint(endpointId);
+    try {
+      await api.adminDeleteWebapp({ id: endpointId });
+      // Refresh endpoints
+      const res = await api.serverEndpoints(serverId);
+      setEndpoints(res.endpoints);
+      if (expandedEndpoint === endpointId) {
+        setExpandedEndpoint(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete endpoint");
+    } finally {
+      setDeletingEndpoint(null);
     }
   }
 
@@ -684,33 +748,97 @@ export default function ServerDetailPage() {
 
                 {expandedEndpoint === endpoint.id && (
                   <div className="border-t border-slate-100 bg-slate-50 px-5 py-4">
-                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                      <div>
-                        <div className="text-xs font-medium text-slate-600">Last Check</div>
-                        <div className="mt-1 text-sm text-slate-900">{formatDateTime(endpoint.lastCheck?.checkedAt)}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs font-medium text-slate-600">HTTP Status</div>
-                        <div className="mt-1 text-sm text-slate-900">{endpoint.lastCheck?.httpStatus ?? "—"}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs font-medium text-slate-600">Response Time</div>
-                        <div className="mt-1 text-sm text-slate-900">{formatMs(endpoint.lastCheck?.responseTimeMs ?? null)}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs font-medium text-slate-600">24h Uptime</div>
-                        <div className="mt-1 text-sm text-slate-900">{formatPctLib(endpoint.uptime24h)}</div>
-                      </div>
-                    </div>
-                    {endpoint.lastCheck?.error && (
-                      <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                        Error: {endpoint.lastCheck.error}
-                      </div>
+                    {editingEndpoint === endpoint.id ? (
+                      <form onSubmit={(e) => handleUpdateEndpoint(e, endpoint.id)} className="space-y-3">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600">Name</label>
+                            <input
+                              type="text"
+                              value={editEndpointName}
+                              onChange={(e) => setEditEndpointName(e.target.value)}
+                              placeholder="API Health"
+                              required
+                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-xs font-medium text-slate-600">URL</label>
+                            <input
+                              type="text"
+                              value={editEndpointUrl}
+                              onChange={(e) => setEditEndpointUrl(e.target.value)}
+                              placeholder="https://api.example.com/health or 10.0.0.1:8080"
+                              required
+                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="submit"
+                            disabled={updatingEndpoint}
+                            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            {updatingEndpoint ? "Updating..." : "Update Endpoint"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                          <div>
+                            <div className="text-xs font-medium text-slate-600">Last Check</div>
+                            <div className="mt-1 text-sm text-slate-900">{formatDateTime(endpoint.lastCheck?.checkedAt)}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-slate-600">HTTP Status</div>
+                            <div className="mt-1 text-sm text-slate-900">{endpoint.lastCheck?.httpStatus ?? "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-slate-600">Response Time</div>
+                            <div className="mt-1 text-sm text-slate-900">{formatMs(endpoint.lastCheck?.responseTimeMs ?? null)}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-medium text-slate-600">24h Uptime</div>
+                            <div className="mt-1 text-sm text-slate-900">{formatPctLib(endpoint.uptime24h)}</div>
+                          </div>
+                        </div>
+                        {endpoint.lastCheck?.error && (
+                          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                            Error: {endpoint.lastCheck.error}
+                          </div>
+                        )}
+                        <div className="mt-3 lg:hidden">
+                          <div className="text-xs font-medium text-slate-600 mb-2">Last 12 hours</div>
+                          <EndpointUptimeBar buckets={endpoint.buckets} />
+                        </div>
+                        <div className="mt-4 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(endpoint)}
+                            className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteEndpoint(endpoint.id)}
+                            disabled={deletingEndpoint === endpoint.id}
+                            className="rounded-md border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                          >
+                            {deletingEndpoint === endpoint.id ? "Deleting..." : "Delete"}
+                          </button>
+                        </div>
+                      </>
                     )}
-                    <div className="mt-3 lg:hidden">
-                      <div className="text-xs font-medium text-slate-600 mb-2">Last 12 hours</div>
-                      <EndpointUptimeBar buckets={endpoint.buckets} />
-                    </div>
                   </div>
                 )}
               </div>
