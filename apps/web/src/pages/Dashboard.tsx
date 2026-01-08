@@ -485,7 +485,15 @@ export default function Dashboard() {
             <div className="font-medium">Recent Failures</div>
             <div className="text-xs text-slate-500">Latest failed endpoint checks</div>
           </div>
-          <div className="text-xs text-slate-500">{recentFailures.length} failures</div>
+          <div className="flex items-center gap-4">
+            <div className="text-xs text-slate-500">{recentFailures.length} shown</div>
+            <Link
+              to="/failures"
+              className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+            >
+              View more
+            </Link>
+          </div>
         </div>
 
         {recentFailures.length === 0 ? (
@@ -507,7 +515,7 @@ export default function Dashboard() {
           </motion.div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {recentFailures.slice(0, 10).map((f, idx) => (
+            {recentFailures.slice(0, 5).map((f, idx) => (
               <motion.div
                 key={`${f.webAppId}-${idx}`}
                 className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:gap-4 sm:px-5 sm:py-4"

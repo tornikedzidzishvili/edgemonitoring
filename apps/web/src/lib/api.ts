@@ -92,6 +92,26 @@ export type DashboardResponse = {
   }>;
 };
 
+export type FailureItem = {
+  webAppId: string;
+  webAppName: string;
+  checkedAt: string;
+  httpStatus: number | null;
+  responseTimeMs: number | null;
+  error: string | null;
+};
+
+export type FailuresResponse = {
+  generatedAt: string;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  failures: FailureItem[];
+};
+
 export type ServerDetail = {
   id: string;
   name: string;
@@ -402,6 +422,7 @@ export const api = {
   uptime: (id: string, range: "24h" | "7d" | "30d") =>
     apiGet<UptimePoint[]>(`/webapps/${encodeURIComponent(id)}/uptime?range=${range}`),
   dashboard: (range: DashboardRange) => apiGet<DashboardResponse>(`/dashboard?range=${range}`),
+  failures: (page = 1, limit = 20) => apiGet<FailuresResponse>(`/failures?page=${page}&limit=${limit}`),
   servers: () => apiGet<ServerInfo[]>(`/servers`),
   serversDashboard: (page = 1, limit = 20) =>
     apiGet<ServerDashboardResponse>(`/servers/dashboard?page=${page}&limit=${limit}`),
@@ -413,6 +434,17 @@ export const api = {
   serverEndpoints: (id: string) => apiGet<ServerEndpointsResponse>(`/servers/${encodeURIComponent(id)}/endpoints`),
   adminCreateWebapp: (params: { name: string; url: string; serverId?: string }) =>
     apiPost<{ id: string }>(`/admin/webapps`, { name: params.name, url: params.url, serverId: params.serverId || undefined }),
+  adminUpdateWebapp: (params: { id: string; name?: string; url?: string; enabled?: boolean }) =>
+    apiPatch<{ id: string; name: string; url: string; enabled: boolean }>(
+      `/admin/webapps/${encodeURIComponent(params.id)}`,
+      {
+        name: params.name,
+        url: params.url,
+        enabled: params.enabled
+      }
+    ),
+  adminDeleteWebapp: (params: { id: string }) =>
+    apiDelete<{ ok: boolean }>(`/admin/webapps/${encodeURIComponent(params.id)}`),
 
   adminCreateSshKey: (params: {
     name: string;

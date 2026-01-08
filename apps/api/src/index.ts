@@ -562,7 +562,7 @@ app.get("/dashboard", async (req) => {
   const recentFailures = await prisma.uptimeCheckResult.findMany({
     where: { ok: false },
     orderBy: { checkedAt: "desc" },
-    take: 15,
+    take: 5,
     include: { webApp: true }
   });
 
@@ -589,6 +589,46 @@ app.get("/dashboard", async (req) => {
       totalCount: b.totalCount
     })),
     recentFailures: recentFailures.map((f) => ({
+      webAppId: f.webAppId,
+      webAppName: (f.webApp as any)?.name ?? "",
+      checkedAt: f.checkedAt,
+      httpStatus: f.httpStatus,
+      responseTimeMs: f.responseTimeMs,
+      error: f.error
+    }))
+  };
+});
+
+app.get("/failures", async (req) => {
+  const query = z
+    .object({
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce.number().int().min(1).max(100).default(20)
+    })
+    .parse(req.query);
+
+  const skip = (query.page - 1) * query.limit;
+
+  const [totalCount, rows] = await Promise.all([
+    prisma.uptimeCheckResult.count({ where: { ok: false } }),
+    prisma.uptimeCheckResult.findMany({
+      where: { ok: false },
+      orderBy: { checkedAt: "desc" },
+      skip,
+      take: query.limit,
+      include: { webApp: true }
+    })
+  ]);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    pagination: {
+      page: query.page,
+      limit: query.limit,
+      total: totalCount,
+      totalPages: Math.ceil(totalCount / query.limit)
+    },
+    failures: rows.map((f) => ({
       webAppId: f.webAppId,
       webAppName: (f.webApp as any)?.name ?? "",
       checkedAt: f.checkedAt,
@@ -697,6 +737,53 @@ app.post("/admin/webapps", async (req) => {
   });
 
   return created;
+});
+
+// Admin: update webapp
+app.patch("/admin/webapps/:id", async (req) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+  const body = z
+    .object({
+      name: z.string().min(1).optional(),
+      url: z.string().min(1).optional(),
+      enabled: z.boolean().optional()
+    })
+    .parse(req.body);
+
+  const existing = await prisma.webApp.findUnique({ where: { id: params.id } });
+  if (!existing) throw app.httpErrors.notFound("webapp-not-found");
+
+  let normalizedUrl: string | undefined;
+  if (body.url) {
+    try {
+      normalizedUrl = normalizeTargetToUrl(body.url);
+    } catch {
+      throw app.httpErrors.badRequest("invalid-url");
+    }
+  }
+
+  const updated = await prisma.webApp.update({
+    where: { id: params.id },
+    data: {
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(normalizedUrl !== undefined ? { url: normalizedUrl } : {}),
+      ...(body.enabled !== undefined ? { enabled: body.enabled } : {})
+    }
+  });
+
+  return updated;
+});
+
+// Admin: delete webapp
+app.delete("/admin/webapps/:id", async (req) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+
+  const existing = await prisma.webApp.findUnique({ where: { id: params.id } });
+  if (!existing) throw app.httpErrors.notFound("webapp-not-found");
+
+  await prisma.webApp.delete({ where: { id: params.id } });
+
+  return { ok: true };
 });
 
 // Admin: create server + return API key once

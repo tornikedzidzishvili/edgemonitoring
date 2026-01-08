@@ -11,6 +11,7 @@ import SharedHostingDetail from "./pages/SharedHostingDetail";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Setup from "./pages/Setup";
+import Failures from "./pages/Failures";
 
 function AppRoutes() {
   const { user, loading, setupRequired } = useAuth();
@@ -35,6 +36,7 @@ function AppRoutes() {
     <Routes>
       <Route element={<Shell />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/failures" element={<Failures />} />
         <Route path="/servers" element={<ServersDashboard />} />
         <Route path="/servers/manage" element={<ServersManage />} />
         <Route path="/servers/:id" element={<ServerDetail />} />
