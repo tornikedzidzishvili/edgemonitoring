@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { motion } from "framer-motion";
 import { api, type DashboardRange, type DashboardResponse, type AlertCountResponse } from "../lib/api";
-import { formatDateTime, formatMs } from "../lib/format";
+import { formatDateTime, formatFailureError, formatMs } from "../lib/format";
 
 function formatCompactTime(iso: string): string {
   const d = new Date(iso);
@@ -541,8 +541,11 @@ export default function Dashboard() {
                     <span>{formatMs(f.responseTimeMs ?? null)}</span>
                   </div>
                   {f.error && (
-                    <div className="mt-2 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                      {f.error}
+                    <div
+                      className="mt-2 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700"
+                      title={f.error}
+                    >
+                      {formatFailureError(f.error)}
                     </div>
                   )}
                 </div>

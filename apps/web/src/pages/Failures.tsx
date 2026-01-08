@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { api, type FailuresResponse } from "../lib/api";
-import { formatDateTime, formatMs } from "../lib/format";
+import { formatDateTime, formatFailureError, formatMs } from "../lib/format";
 
 export default function Failures() {
   const [data, setData] = useState<FailuresResponse | null>(null);
@@ -91,7 +91,12 @@ export default function Failures() {
                 </div>
 
                 {f.error ? (
-                  <div className="mt-2 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700">{f.error}</div>
+                  <div
+                    className="mt-2 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700"
+                    title={f.error}
+                  >
+                    {formatFailureError(f.error)}
+                  </div>
                 ) : null}
               </div>
             </motion.div>
