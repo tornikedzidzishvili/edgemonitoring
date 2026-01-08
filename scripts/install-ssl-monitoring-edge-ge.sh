@@ -16,6 +16,7 @@ if [ -z "$EMAIL" ]; then
 fi
 
 echo "[1/3] Starting production stack (HTTP only)"
+umask 077
 if [ -f "$APP_DIR/.env" ]; then
   if grep -q '^PROXY_CONF=' "$APP_DIR/.env"; then
     sed -i "s|^PROXY_CONF=.*$|PROXY_CONF=./infra/proxy/nginx.http.conf|" "$APP_DIR/.env"
@@ -25,6 +26,7 @@ if [ -f "$APP_DIR/.env" ]; then
 else
   printf 'PROXY_CONF=./infra/proxy/nginx.http.conf\n' >"$APP_DIR/.env"
 fi
+chmod 600 "$APP_DIR/.env" || true
 
 dc up -d --build api web proxy
 
@@ -42,5 +44,6 @@ if grep -q '^PROXY_CONF=' "$APP_DIR/.env"; then
 else
   printf '\nPROXY_CONF=./infra/proxy/nginx.https.conf\n' >>"$APP_DIR/.env"
 fi
+chmod 600 "$APP_DIR/.env" || true
 dc up -d --no-deps proxy
 dc exec -T proxy nginx -s reload || true

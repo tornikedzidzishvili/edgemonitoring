@@ -58,10 +58,12 @@ fi
 
 echo "[2/5] Writing production env file (not committed)"
 # docker compose automatically reads .env in the working directory
+umask 077
 cat >"$APP_DIR/.env" <<EOF
 SSH_KEY_MASTER_SECRET=$SSH_KEY_MASTER_SECRET
 PROXY_CONF=./infra/proxy/nginx.http.conf
 EOF
+chmod 600 "$APP_DIR/.env" || true
 
 echo "[3/5] Building and starting stack (HTTP proxy initially)"
 # Use --no-cache when FORCE_REBUILD=1 to bust Docker cache
@@ -95,6 +97,7 @@ if [ -n "${CERTBOT_EMAIL:-}" ]; then
   else
     printf '\nPROXY_CONF=./infra/proxy/nginx.https.conf\n' >>"$APP_DIR/.env"
   fi
+  chmod 600 "$APP_DIR/.env" || true
   dc up -d --no-deps proxy
   dc exec -T proxy nginx -s reload || true
 else
