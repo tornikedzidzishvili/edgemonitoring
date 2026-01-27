@@ -889,15 +889,25 @@ app.patch("/admin/servers/:id", async (req) => {
   };
 });
 
-// Admin: delete server (keeps webapps, just detaches them)
+// Admin: delete server (also deletes all associated webapps and their checks)
 app.delete("/admin/servers/:id", async (req) => {
   const params = z.object({ id: z.string().min(1) }).parse(req.params);
 
   const server = await prisma.server.findUnique({ where: { id: params.id } });
   if (!server) throw app.httpErrors.notFound("server-not-found");
 
+  // Get all webapp IDs for this server to delete their check results
+  const webApps = await prisma.webApp.findMany({
+    where: { serverId: server.id },
+    select: { id: true }
+  });
+  const webAppIds = webApps.map((w) => w.id);
+
   await prisma.$transaction([
-    prisma.webApp.updateMany({ where: { serverId: server.id }, data: { serverId: null } }),
+    // Delete uptime check results for all webapps of this server
+    prisma.uptimeCheckResult.deleteMany({ where: { webAppId: { in: webAppIds } } }),
+    // Delete webapps belonging to this server
+    prisma.webApp.deleteMany({ where: { serverId: server.id } }),
     prisma.serverReport.deleteMany({ where: { serverId: server.id } }),
     prisma.serverMetricMinute.deleteMany({ where: { serverId: server.id } }),
     prisma.server.delete({ where: { id: server.id } })
