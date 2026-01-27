@@ -48,7 +48,9 @@ export async function authRoutes(app: FastifyInstance) {
         email: user.email,
         fullName: user.fullName,
         position: user.position,
-        role: user.role
+        phone: user.phone,
+        role: user.role,
+        twoFactorEnabled: user.twoFactorEnabled
       },
       token
     };
@@ -103,6 +105,7 @@ export async function authRoutes(app: FastifyInstance) {
         email: user.email,
         fullName: user.fullName,
         position: user.position,
+        phone: user.phone,
         role: user.role,
         twoFactorEnabled: user.twoFactorEnabled
       },
