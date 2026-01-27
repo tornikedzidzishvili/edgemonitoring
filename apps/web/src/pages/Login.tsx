@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "../lib/auth";
 import { startAuthentication } from "@simplewebauthn/browser";
+import { API_BASE_URL } from "../lib/api";
 
 export default function Login() {
   const { login } = useAuth();
@@ -20,7 +21,7 @@ export default function Login() {
 
     try {
       const optionsRes = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:4000"}/passkeys/authenticate/options`,
+        `${API_BASE_URL}/passkeys/authenticate/options`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -36,7 +37,7 @@ export default function Login() {
       const asseResp = await startAuthentication(options);
 
       const verifyRes = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:4000"}/passkeys/authenticate/verify`,
+        `${API_BASE_URL}/passkeys/authenticate/verify`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

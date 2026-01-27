@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../lib/auth";
 import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
+import { API_BASE_URL } from "../lib/api";
 
 type User = {
   id: string;
@@ -74,7 +75,7 @@ export default function Profile() {
   const loadPasskeys = async () => {
     try {
       const token = localStorage.getItem("authToken");
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:4000"}/passkeys`, {
+      const res = await fetch(`${API_BASE_URL}/passkeys`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -93,7 +94,7 @@ export default function Profile() {
 
     try {
       const token = localStorage.getItem("authToken");
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:4000"}/profile`, {
+      const res = await fetch(`${API_BASE_URL}/profile`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -138,7 +139,7 @@ export default function Profile() {
 
     try {
       const token = localStorage.getItem("authToken");
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:4000"}/profile/change-password`, {
+      const res = await fetch(`${API_BASE_URL}/profile/change-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -172,7 +173,7 @@ export default function Profile() {
 
     try {
       const token = localStorage.getItem("authToken");
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:4000"}/profile/2fa/setup`, {
+      const res = await fetch(`${API_BASE_URL}/profile/2fa/setup`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`
@@ -203,7 +204,7 @@ export default function Profile() {
 
     try {
       const token = localStorage.getItem("authToken");
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:4000"}/profile/2fa/enable`, {
+      const res = await fetch(`${API_BASE_URL}/profile/2fa/enable`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -242,7 +243,7 @@ export default function Profile() {
 
     try {
       const token = localStorage.getItem("authToken");
-      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:4000"}/profile/2fa/disable`, {
+      const res = await fetch(`${API_BASE_URL}/profile/2fa/disable`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -283,7 +284,7 @@ export default function Profile() {
       
       // Get registration options
       const optionsRes = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:4000"}/passkeys/register/options`,
+        `${API_BASE_URL}/passkeys/register/options`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` }
@@ -301,7 +302,7 @@ export default function Profile() {
 
       // Verify registration
       const verifyRes = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:4000"}/passkeys/register/verify`,
+        `${API_BASE_URL}/passkeys/register/verify`,
         {
           method: "POST",
           headers: {
@@ -336,7 +337,7 @@ export default function Profile() {
     try {
       const token = localStorage.getItem("authToken");
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:4000"}/passkeys/${id}`,
+        `${API_BASE_URL}/passkeys/${id}`,
         {
           method: "PATCH",
           headers: {
@@ -370,7 +371,7 @@ export default function Profile() {
     try {
       const token = localStorage.getItem("authToken");
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:4000"}/passkeys/${id}`,
+        `${API_BASE_URL}/passkeys/${id}`,
         {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` }
