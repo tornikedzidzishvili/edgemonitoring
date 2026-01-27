@@ -643,6 +643,17 @@ app.get("/failures", async (req) => {
   };
 });
 
+app.delete("/failures", async () => {
+  const result = await prisma.uptimeCheckResult.deleteMany({
+    where: { ok: false }
+  });
+
+  return {
+    ok: true,
+    deletedCount: result.count
+  };
+});
+
 app.get("/webapps/:id", async (req) => {
   const params = z.object({ id: z.string().min(1) }).parse(req.params);
 

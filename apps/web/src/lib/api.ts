@@ -423,6 +423,7 @@ export const api = {
     apiGet<UptimePoint[]>(`/webapps/${encodeURIComponent(id)}/uptime?range=${range}`),
   dashboard: (range: DashboardRange) => apiGet<DashboardResponse>(`/dashboard?range=${range}`),
   failures: (page = 1, limit = 20) => apiGet<FailuresResponse>(`/failures?page=${page}&limit=${limit}`),
+  clearFailures: () => apiDelete<{ ok: boolean; deletedCount: number }>(`/failures`),
   servers: () => apiGet<ServerInfo[]>(`/servers`),
   serversDashboard: (page = 1, limit = 20) =>
     apiGet<ServerDashboardResponse>(`/servers/dashboard?page=${page}&limit=${limit}`),
