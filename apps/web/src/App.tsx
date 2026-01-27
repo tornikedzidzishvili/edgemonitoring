@@ -9,6 +9,7 @@ import Alerts from "./pages/Alerts";
 import SharedHosting from "./pages/SharedHosting";
 import SharedHostingDetail from "./pages/SharedHostingDetail";
 import Settings from "./pages/Settings";
+import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 import Setup from "./pages/Setup";
 import Failures from "./pages/Failures";
@@ -43,6 +44,7 @@ function AppRoutes() {
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/shared-hosting" element={<SharedHosting />} />
         <Route path="/shared-hosting/:id" element={<SharedHostingDetail />} />
+        <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

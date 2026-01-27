@@ -97,11 +97,33 @@ model User {
   position     String?
   phone        String?
   role         String    @default("user") // "admin" or "user"
+  
+  // 2FA fields
+  twoFactorEnabled  Boolean   @default(false)
+  twoFactorSecret   String?
+  
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   sessions     Session[]
+  passkeys     Passkey[]
   alertRecipient AlertRecipient?
   resolvedAlerts ServerAlert[]
+}
+
+model Passkey {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId      String   @unique
+  publicKey         String
+  counter           Int
+  transports        String?  // JSON array of transport types
+  name              String?  // User-friendly name for the passkey
+  createdAt         DateTime @default(now())
+  lastUsedAt        DateTime?
+
+  @@index([userId])
+  @@index([credentialId])
 }
 
 model Session {

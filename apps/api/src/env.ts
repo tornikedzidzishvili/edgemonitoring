@@ -5,7 +5,9 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   SSH_KEY_MASTER_SECRET: z.string().min(16),
   CHECK_INTERVAL_SECONDS: z.coerce.number().int().positive().default(60),
-  CHECK_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000)
+  CHECK_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  RP_ID: z.string().optional(),
+  ORIGIN: z.string().optional()
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -1,9 +1,19 @@
 # Edge Monitoring
 
 Monorepo with:
-- `apps/api`: Central monitoring API + uptime scheduler + storage
+- `apps/api`: Central monitoring API + uptime scheduler + storage with secure authentication and 2FA
 - `apps/web`: Dashboard UI (uptime cards, list, details + chart)
 - `apps/agent`: Lightweight edge agent that reports Docker + system snapshots via API key
+
+## Features
+
+- 🔐 **Secure Authentication**: User authentication with password hashing and session management
+- � **Passkeys (WebAuthn)**: Modern passwordless authentication using biometrics, security keys, or device authenticators
+- 🔒 **Two-Factor Authentication (2FA)**: Optional TOTP-based 2FA for enhanced security
+- 👤 **User Profile Management**: Update profile information, change password, and manage 2FA/passkey settings
+- 📊 **Server Monitoring**: Track server health, metrics, and alerts
+- 🌐 **Web Application Monitoring**: Monitor uptime and performance
+- 🚨 **Alert System**: Email and SMS notifications for issues
 
 ## Prereqs
 - Node.js 20+
@@ -165,6 +175,76 @@ To create/apply schema locally (dev):
 ```bash
 npm run db:migrate -w @edge-monitoring/api
 ```
+
+## User Authentication & Security
+
+### Initial Setup
+When you first access the web UI, you'll be prompted to create an admin account. This account has full access to all features including:
+- User management
+- System settings
+- Server and application monitoring
+- Alert configuration
+
+### User Profile Management
+Access your profile by clicking on your name in the top right corner and selecting "My Profile". From here you can:
+- Update your name, email, and phone number
+- Change your password
+- Enable/disable two-factor authentication (2FA)
+- Add and manage passkeys for passwordless login
+
+### Passkeys (WebAuthn)
+Passkeys provide a modern, secure, and convenient way to sign in without passwords. They use biometric authentication (fingerprint, face recognition) or your device's security features.
+
+#### Adding a Passkey:
+1. Navigate to your profile page
+2. Click on the "Passkeys" tab
+3. Click "Add Passkey"
+4. Follow your browser/device prompts to create the passkey (e.g., use Touch ID, Face ID, or Windows Hello)
+5. Your passkey is now ready to use!
+
+#### Using a Passkey to Sign In:
+1. On the login page, click "Sign in with Passkey"
+2. Your browser/device will prompt you to authenticate (fingerprint, face, etc.)
+3. You'll be signed in immediately - no password needed!
+
+#### Managing Passkeys:
+- **Rename**: Click "Rename" to give your passkey a descriptive name (e.g., "MacBook Pro", "iPhone")
+- **Delete**: Click "Delete" to remove a passkey from your account
+
+**Benefits of Passkeys**:
+- 🚀 Faster login - no typing required
+- 🔐 More secure - immune to phishing and password breaches
+- 📱 Works across devices if synced (via iCloud Keychain, Google Password Manager, etc.)
+- ♿ More accessible - easier for users with disabilities
+
+**Note**: You can use multiple passkeys on different devices (laptop, phone, tablet, etc.)
+
+### Two-Factor Authentication (2FA)
+2FA adds an extra layer of security to your account using Time-based One-Time Passwords (TOTP).
+
+#### Enabling 2FA:
+1. Navigate to your profile page
+2. Click on the "Two-Factor Auth" tab
+3. Click "Setup Two-Factor Authentication"
+4. Scan the QR code with your authenticator app (Google Authenticator, Authy, 1Password, etc.)
+   - Alternatively, you can manually enter the secret code shown
+5. Enter the 6-digit code from your authenticator app
+6. Click "Enable 2FA"
+
+#### Using 2FA:
+Once enabled, you'll need to:
+1. Enter your email and password as usual
+2. Enter the 6-digit code from your authenticator app
+3. Click "Sign in"
+
+#### Disabling 2FA:
+To disable 2FA (requires both password and 2FA code):
+1. Go to your profile → "Two-Factor Auth" tab
+2. Enter your password
+3. Enter your current 2FA code
+4. Click "Disable 2FA"
+
+**Important**: Keep your 2FA secret code safe! If you lose access to your authenticator app, you'll need to contact an admin to regain access to your account.
 
 ## Add a server
 Create a "Server" record (inventory + SSH defaults). Agent API keys are optional.

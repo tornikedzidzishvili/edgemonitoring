@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { hashPassword, verifyPassword, createSession, deleteSession } from "../services/userAuth.js";
 import { requireAuth } from "../middleware/sessionAuth.js";
+import { generateTwoFactorSecret, verifyTwoFactorToken } from "../services/twoFactor.js";
 
 export async function authRoutes(app: FastifyInstance) {
   // Check if setup is needed (no users exist)
@@ -58,7 +59,8 @@ export async function authRoutes(app: FastifyInstance) {
     const body = z
       .object({
         email: z.string().email(),
-        password: z.string().min(1)
+        password: z.string().min(1),
+        twoFactorToken: z.string().optional()
       })
       .parse(req.body);
 
@@ -75,6 +77,24 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: "invalid-credentials", message: "Invalid email or password" });
     }
 
+    // Check if 2FA is enabled
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      if (!body.twoFactorToken) {
+        return reply.status(401).send({ 
+          error: "2fa-required", 
+          message: "Two-factor authentication token required" 
+        });
+      }
+
+      const isTokenValid = verifyTwoFactorToken(body.twoFactorToken, user.twoFactorSecret);
+      if (!isTokenValid) {
+        return reply.status(401).send({ 
+          error: "invalid-2fa-token", 
+          message: "Invalid two-factor authentication token" 
+        });
+      }
+    }
+
     const { token } = await createSession(user.id);
 
     return {
@@ -83,7 +103,8 @@ export async function authRoutes(app: FastifyInstance) {
         email: user.email,
         fullName: user.fullName,
         position: user.position,
-        role: user.role
+        role: user.role,
+        twoFactorEnabled: user.twoFactorEnabled
       },
       token
     };
@@ -101,7 +122,12 @@ export async function authRoutes(app: FastifyInstance) {
 
   // Get current user
   app.get("/auth/me", { preHandler: requireAuth }, async (req) => {
-    return { user: req.user };
+    return { 
+      user: {
+        ...req.user,
+        twoFactorEnabled: req.user?.twoFactorEnabled ?? false
+      }
+    };
   });
 
   // Change password

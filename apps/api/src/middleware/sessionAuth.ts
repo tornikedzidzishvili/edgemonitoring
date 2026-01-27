@@ -6,7 +6,9 @@ export interface AuthenticatedUser {
   email: string;
   fullName: string;
   position: string | null;
+  phone: string | null;
   role: string;
+  twoFactorEnabled: boolean;
 }
 
 declare module "fastify" {
@@ -33,7 +35,9 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
     email: session.user.email,
     fullName: session.user.fullName,
     position: session.user.position,
-    role: session.user.role
+    phone: session.user.phone,
+    role: session.user.role,
+    twoFactorEnabled: session.user.twoFactorEnabled
   };
 }
 
@@ -61,7 +65,9 @@ export async function optionalAuth(req: FastifyRequest) {
       email: session.user.email,
       fullName: session.user.fullName,
       position: session.user.position,
-      role: session.user.role
+      phone: session.user.phone,
+      role: session.user.role,
+      twoFactorEnabled: session.user.twoFactorEnabled
     };
   }
 }

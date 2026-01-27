@@ -6,7 +6,9 @@ export type User = {
   email: string;
   fullName: string;
   position: string | null;
+  phone?: string | null;
   role: string;
+  twoFactorEnabled?: boolean;
 };
 
 type AuthState = {
@@ -17,10 +19,11 @@ type AuthState = {
 };
 
 type AuthContextType = AuthState & {
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, twoFactorToken?: string) => Promise<void>;
   logout: () => Promise<void>;
   setup: (email: string, password: string, fullName: string, position?: string) => Promise<void>;
   checkSetupRequired: () => Promise<boolean>;
+  setUser: (user: User) => void;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -88,11 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     init();
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string, twoFactorToken?: string) => {
     const res = await fetch(`${API_BASE_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password, twoFactorToken })
     });
 
     if (!res.ok) {
@@ -137,8 +140,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, user: data.user, setupRequired: false }));
   }, [setToken]);
 
+  const setUser = useCallback((user: User) => {
+    setState((s) => ({ ...s, user }));
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, setup, checkSetupRequired }}>
+    <AuthContext.Provider value={{ ...state, login, logout, setup, checkSetupRequired, setUser }}>
       {children}
     </AuthContext.Provider>
   );

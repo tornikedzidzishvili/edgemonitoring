@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "../lib/auth";
 
@@ -7,7 +7,7 @@ const navItems = [
   { to: "/", label: "Dashboard", icon: DashboardIcon },
   { to: "/servers", label: "Servers", icon: ServersIcon },
   { to: "/alerts", label: "Alerts", icon: AlertsIcon },
-  { to: "/shared-hosting", label: "Shared Hosting", icon: SharedHostingIcon },
+  { to: "/shared-hosting", label: "Hosting", icon: SharedHostingIcon },
   { to: "/settings", label: "Settings", adminOnly: true, icon: SettingsIcon }
 ];
 
@@ -69,10 +69,13 @@ function CloseIcon({ className }: { className?: string }) {
 
 export default function Shell() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     setMobileMenuOpen(false);
+    setUserMenuOpen(false);
     await logout();
   };
 
@@ -81,22 +84,34 @@ export default function Shell() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+    <div className="min-h-screen bg-obsidian-950 grid-bg">
+      {/* Ambient glow effects */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-neon-cyan/5 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 -left-40 w-80 h-80 bg-neon-violet/5 rounded-full blur-3xl" />
+      </div>
+
+      <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-obsidian-950/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 lg:py-4">
           {/* Logo */}
           <motion.div
-            className="flex items-center gap-2 font-semibold text-slate-900"
+            className="flex items-center gap-3"
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white">
-              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-              </svg>
+            <div className="relative flex h-9 w-9 items-center justify-center">
+              <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-neon-cyan to-neon-emerald opacity-20" />
+              <div className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-neon-cyan/30 bg-obsidian-900">
+                <svg className="h-5 w-5 text-neon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                </svg>
+              </div>
             </div>
-            <span className="hidden sm:inline">Edge Monitoring</span>
+            <div className="hidden sm:block">
+              <span className="font-display font-semibold text-white">Edge</span>
+              <span className="font-display font-semibold text-neon-cyan">Monitor</span>
+            </div>
           </motion.div>
 
           {/* Desktop Navigation */}
@@ -114,8 +129,8 @@ export default function Shell() {
                     [
                       "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                       isActive
-                        ? "bg-slate-900 text-white shadow-sm"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20"
+                        : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                     ].join(" ")
                   }
                   end={item.to === "/"}
@@ -129,32 +144,79 @@ export default function Shell() {
 
           {/* Desktop User Section */}
           <motion.div
-            className="hidden items-center gap-3 md:flex"
+            className="hidden items-center gap-3 md:flex relative"
             initial={{ opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3, delay: 0.2 }}
           >
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-sm font-medium text-slate-600">
-                {user?.fullName?.charAt(0)?.toUpperCase() ?? "U"}
-              </div>
-              <span className="text-sm font-medium text-slate-700">{user?.fullName}</span>
-            </div>
-            <div className="h-4 w-px bg-slate-200" />
             <button
               type="button"
-              onClick={handleLogout}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-slate-800/50 transition-colors border border-transparent hover:border-slate-700/50"
             >
-              Logout
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-neon-cyan/20 to-neon-violet/20 text-sm font-medium text-white border border-slate-700/50">
+                {user?.fullName?.charAt(0)?.toUpperCase() ?? "U"}
+              </div>
+              <span className="text-sm font-medium text-slate-300">{user?.fullName}</span>
+              <svg className={`h-4 w-4 text-slate-500 transition-transform ${userMenuOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
+
+            <AnimatePresence>
+              {userMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setUserMenuOpen(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 top-12 z-50 w-56 rounded-xl border border-slate-700/50 bg-obsidian-900 shadow-2xl overflow-hidden"
+                  >
+                    <div className="p-3 border-b border-slate-700/50 bg-obsidian-800/50">
+                      <div className="text-sm font-medium text-white">{user?.fullName}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">{user?.email}</div>
+                    </div>
+                    <div className="p-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigate("/profile");
+                          setUserMenuOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        My Profile
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-neon-rose hover:bg-neon-rose/10 transition-colors"
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
+                        </svg>
+                        Logout
+                      </button>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </motion.div>
 
           {/* Mobile Menu Button */}
           <motion.button
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 md:hidden"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white md:hidden transition-colors"
             whileTap={{ scale: 0.95 }}
           >
             <AnimatePresence mode="wait" initial={false}>
@@ -191,10 +253,10 @@ export default function Shell() {
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-              className="overflow-hidden border-t border-slate-200 md:hidden"
+              className="overflow-hidden border-t border-slate-800/80 md:hidden"
             >
               <motion.nav
-                className="space-y-1 bg-white px-4 py-3"
+                className="space-y-1 bg-obsidian-900/50 px-4 py-3"
                 initial="closed"
                 animate="open"
                 variants={{
@@ -219,10 +281,10 @@ export default function Shell() {
                       onClick={() => setMobileMenuOpen(false)}
                       className={({ isActive }) =>
                         [
-                          "flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium transition-colors",
+                          "flex items-center gap-3 rounded-xl px-4 py-3 text-base font-medium transition-all",
                           isActive
-                            ? "bg-slate-900 text-white"
-                            : "text-slate-600 hover:bg-slate-100"
+                            ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20"
+                            : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
                         ].join(" ")
                       }
                       end={item.to === "/"}
@@ -235,25 +297,35 @@ export default function Shell() {
 
                 {/* Mobile User Section */}
                 <motion.div
-                  className="mt-4 border-t border-slate-200 pt-4"
+                  className="mt-4 border-t border-slate-800 pt-4"
                   variants={{
                     open: { opacity: 1, x: 0 },
                     closed: { opacity: 0, x: -20 }
                   }}
                 >
                   <div className="mb-3 flex items-center gap-3 px-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-sm font-medium text-slate-600">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-neon-cyan/20 to-neon-violet/20 text-sm font-medium text-white border border-slate-700/50">
                       {user?.fullName?.charAt(0)?.toUpperCase() ?? "U"}
                     </div>
                     <div>
-                      <div className="font-medium text-slate-900">{user?.fullName}</div>
+                      <div className="font-medium text-white">{user?.fullName}</div>
                       <div className="text-sm text-slate-500">{user?.role}</div>
                     </div>
                   </div>
+                  <NavLink
+                    to="/profile"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-base font-medium text-slate-400 transition-colors hover:bg-slate-800/50 hover:text-white"
+                  >
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    My Profile
+                  </NavLink>
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-base font-medium text-rose-600 transition-colors hover:bg-rose-50"
+                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-base font-medium text-neon-rose transition-colors hover:bg-neon-rose/10"
                   >
                     <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
@@ -267,7 +339,7 @@ export default function Shell() {
         </AnimatePresence>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-4 sm:py-6">
+      <main className="relative mx-auto max-w-6xl px-4 py-6 sm:py-8">
         <Outlet />
       </main>
     </div>
