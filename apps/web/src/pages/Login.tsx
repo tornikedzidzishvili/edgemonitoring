@@ -54,7 +54,7 @@ export default function Login() {
       }
 
       const data = await verifyRes.json();
-      localStorage.setItem("authToken", data.token);
+      localStorage.setItem("edge_monitoring_token", data.token);
       window.location.reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Passkey authentication failed");

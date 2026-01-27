@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useAuth } from "../lib/auth";
+import { useAuth, getStoredToken } from "../lib/auth";
 import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 import { API_BASE_URL } from "../lib/api";
 
@@ -130,7 +130,7 @@ export default function Profile() {
 
   const loadPasskeys = async () => {
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getStoredToken();
       const res = await fetch(`${API_BASE_URL}/passkeys`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -149,7 +149,7 @@ export default function Profile() {
     setUpdateMessage(null);
 
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getStoredToken();
       const res = await fetch(`${API_BASE_URL}/profile`, {
         method: "PATCH",
         headers: {
@@ -194,7 +194,7 @@ export default function Profile() {
     setIsChangingPassword(true);
 
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getStoredToken();
       const res = await fetch(`${API_BASE_URL}/profile/change-password`, {
         method: "POST",
         headers: {
@@ -228,7 +228,7 @@ export default function Profile() {
     setTwoFactorMessage(null);
 
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getStoredToken();
       const res = await fetch(`${API_BASE_URL}/profile/2fa/setup`, {
         method: "POST",
         headers: {
@@ -259,7 +259,7 @@ export default function Profile() {
     setTwoFactorMessage(null);
 
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getStoredToken();
       const res = await fetch(`${API_BASE_URL}/profile/2fa/enable`, {
         method: "POST",
         headers: {
@@ -298,7 +298,7 @@ export default function Profile() {
     setTwoFactorMessage(null);
 
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getStoredToken();
       const res = await fetch(`${API_BASE_URL}/profile/2fa/disable`, {
         method: "POST",
         headers: {
@@ -336,7 +336,7 @@ export default function Profile() {
     setPasskeyMessage(null);
 
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getStoredToken();
 
       // Get registration options
       const optionsRes = await fetch(
@@ -391,7 +391,7 @@ export default function Profile() {
 
   const handleRenamePasskey = async (id: string) => {
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getStoredToken();
       const res = await fetch(
         `${API_BASE_URL}/passkeys/${id}`,
         {
@@ -425,7 +425,7 @@ export default function Profile() {
     }
 
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getStoredToken();
       const res = await fetch(
         `${API_BASE_URL}/passkeys/${id}`,
         {
