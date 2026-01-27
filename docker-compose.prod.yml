@@ -9,6 +9,8 @@ services:
       - SSH_KEY_MASTER_SECRET=${SSH_KEY_MASTER_SECRET}
       - CHECK_INTERVAL_SECONDS=60
       - CHECK_TIMEOUT_MS=10000
+      - RP_ID=monitoring.edge.ge
+      - ORIGIN=https://monitoring.edge.ge
     command: ["sh", "-lc", "cd /repo/apps/api; npx prisma migrate deploy || npx prisma db push; node /repo/apps/api/dist/index.js"]
     volumes:
       - api_data:/data
