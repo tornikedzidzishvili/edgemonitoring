@@ -1,7 +1,22 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { motion } from "framer-motion";
 import { api, type AlertRecipientInfo, type UserInfo } from "../../lib/api";
 
 type Method = "none" | "email" | "sms" | "both";
+
+const inputClasses =
+  "w-full rounded-lg border border-slate-700/50 bg-obsidian-800 px-4 py-2.5 text-sm text-white placeholder-slate-500 transition-all focus:border-neon-cyan/50 focus:outline-none focus:ring-2 focus:ring-neon-cyan/20";
+
+const selectClasses =
+  "w-full rounded-lg border border-slate-700/50 bg-obsidian-800 px-4 py-2.5 text-sm text-white transition-all focus:border-neon-cyan/50 focus:outline-none focus:ring-2 focus:ring-neon-cyan/20";
+
+const labelClasses = "block text-sm font-medium text-slate-300 mb-1.5";
+
+const primaryBtnClasses =
+  "rounded-lg bg-gradient-to-r from-neon-cyan to-neon-emerald px-5 py-2.5 text-sm font-semibold text-obsidian-900 shadow-lg shadow-neon-cyan/20 transition-all hover:shadow-neon-cyan/30 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed";
+
+const secondaryBtnClasses =
+  "rounded-lg border border-slate-700/50 bg-obsidian-800/60 px-4 py-2.5 text-sm font-medium text-slate-300 transition-all hover:bg-obsidian-700/50 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed";
 
 export default function AlertsSettings() {
   const [users, setUsers] = useState<UserInfo[]>([]);
@@ -126,29 +141,51 @@ export default function AlertsSettings() {
   };
 
   if (loading) {
-    return <div className="text-sm text-slate-500">Loading alert settings...</div>;
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-400">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-neon-cyan border-t-transparent" />
+        Loading alert settings...
+      </div>
+    );
   }
 
   return (
     <div>
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Alerts</h2>
-        <p className="mt-1 text-sm text-slate-500">Choose who gets alerted when a service goes down</p>
+        <h2 className="text-lg font-semibold text-white">Alerts</h2>
+        <p className="mt-1 text-sm text-slate-400">Choose who gets alerted when a service goes down</p>
       </div>
 
-      {error && <div className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      {success && <div className="mt-4 rounded-md bg-green-50 p-3 text-sm text-green-700">{success}</div>}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-4 rounded-lg border border-neon-rose/30 bg-neon-rose/10 px-4 py-3 text-sm text-neon-rose"
+        >
+          {error}
+        </motion.div>
+      )}
+
+      {success && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-4 rounded-lg border border-neon-emerald/30 bg-neon-emerald/10 px-4 py-3 text-sm text-neon-emerald"
+        >
+          {success}
+        </motion.div>
+      )}
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-6">
         <div>
-          <label htmlFor="alertUser" className="block text-sm font-medium text-slate-700">
+          <label htmlFor="alertUser" className={labelClasses}>
             User
           </label>
           <select
             id="alertUser"
             value={userId}
             onChange={(e) => loadUserIntoForm(e.target.value)}
-            className="mt-1 block w-full rounded-md border border-slate-300 py-2 pl-3 pr-10 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className={selectClasses}
           >
             <option value="">Select a user…</option>
             {users.map((u) => (
@@ -161,7 +198,7 @@ export default function AlertsSettings() {
 
         <div className="grid gap-6 sm:grid-cols-2">
           <div>
-            <label htmlFor="alertEmail" className="block text-sm font-medium text-slate-700">
+            <label htmlFor="alertEmail" className={labelClasses}>
               Alert Email
             </label>
             <input
@@ -170,12 +207,12 @@ export default function AlertsSettings() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@example.com"
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className={inputClasses}
             />
           </div>
 
           <div>
-            <label htmlFor="alertPhone" className="block text-sm font-medium text-slate-700">
+            <label htmlFor="alertPhone" className={labelClasses}>
               Alert Phone
             </label>
             <input
@@ -184,20 +221,20 @@ export default function AlertsSettings() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="9955XXXXXXXX"
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className={inputClasses}
             />
           </div>
         </div>
 
         <div>
-          <label htmlFor="alertMethod" className="block text-sm font-medium text-slate-700">
+          <label htmlFor="alertMethod" className={labelClasses}>
             Alert Method
           </label>
           <select
             id="alertMethod"
             value={method}
             onChange={(e) => setMethod(e.target.value as Method)}
-            className="mt-1 block w-full rounded-md border border-slate-300 py-2 pl-3 pr-10 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className={selectClasses}
           >
             <option value="none">None</option>
             <option value="email">Email</option>
@@ -207,53 +244,74 @@ export default function AlertsSettings() {
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={handleTest}
-            disabled={testing}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {testing ? "Sending..." : "Send Test"}
+          <button type="button" onClick={handleTest} disabled={testing} className={secondaryBtnClasses}>
+            {testing ? (
+              <span className="flex items-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Sending...
+              </span>
+            ) : (
+              "Send Test"
+            )}
           </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Recipient"}
+          <button type="submit" disabled={saving} className={primaryBtnClasses}>
+            {saving ? (
+              <span className="flex items-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Saving...
+              </span>
+            ) : (
+              "Save Recipient"
+            )}
           </button>
         </div>
       </form>
 
       <div className="mt-10">
-        <h3 className="text-sm font-semibold text-slate-900">Configured Recipients</h3>
-        <div className="-mx-4 mt-3 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <h3 className="text-sm font-semibold text-white">Configured Recipients</h3>
+        <div className="-mx-4 mt-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           <div className="inline-block min-w-full align-middle">
-            <div className="overflow-hidden rounded-lg border border-slate-200">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50">
+            <div className="overflow-hidden rounded-xl border border-slate-700/50">
+              <table className="min-w-full divide-y divide-slate-700/50">
+                <thead className="bg-obsidian-800/60">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">User</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Email</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Phone</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Method</th>
+                    <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">User</th>
+                    <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">Email</th>
+                    <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">Phone</th>
+                    <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">Method</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {recipients.map((r) => (
-                    <tr key={r.id}>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <div className="font-medium text-slate-900">{r.user.fullName}</div>
-                        <div className="text-sm text-slate-500">{r.user.email}</div>
+                <tbody className="divide-y divide-slate-700/30">
+                  {recipients.map((r, idx) => (
+                    <motion.tr
+                      key={r.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.03 }}
+                      className="transition-colors hover:bg-obsidian-700/30"
+                    >
+                      <td className="whitespace-nowrap px-5 py-4">
+                        <div className="font-medium text-white">{r.user.fullName}</div>
+                        <div className="text-sm text-slate-400">{r.user.email}</div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">{r.email || "-"}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">{r.phone || "-"}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-600">{r.method}</td>
-                    </tr>
+                      <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-400">{r.email || "—"}</td>
+                      <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-400">{r.phone || "—"}</td>
+                      <td className="whitespace-nowrap px-5 py-4">
+                        <span className="inline-flex rounded-full border border-slate-600/30 bg-slate-600/10 px-2.5 py-1 text-xs font-medium text-slate-400">
+                          {r.method}
+                        </span>
+                      </td>
+                    </motion.tr>
                   ))}
                   {recipients.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">
+                      <td colSpan={4} className="px-5 py-12 text-center text-sm text-slate-500">
                         No alert recipients configured
                       </td>
                     </tr>

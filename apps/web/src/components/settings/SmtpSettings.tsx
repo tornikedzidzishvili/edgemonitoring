@@ -1,5 +1,17 @@
 import { useState, useEffect, type FormEvent } from "react";
+import { motion } from "framer-motion";
 import { api, type SmtpSettingsInfo } from "../../lib/api";
+
+const inputClasses =
+  "w-full rounded-lg border border-slate-700/50 bg-obsidian-800 px-4 py-2.5 text-sm text-white placeholder-slate-500 transition-all focus:border-neon-cyan/50 focus:outline-none focus:ring-2 focus:ring-neon-cyan/20";
+
+const labelClasses = "block text-sm font-medium text-slate-300 mb-1.5";
+
+const primaryBtnClasses =
+  "rounded-lg bg-gradient-to-r from-neon-cyan to-neon-emerald px-5 py-2.5 text-sm font-semibold text-obsidian-900 shadow-lg shadow-neon-cyan/20 transition-all hover:shadow-neon-cyan/30 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed";
+
+const dangerBtnClasses =
+  "rounded-lg border border-neon-rose/50 bg-neon-rose/10 px-4 py-2.5 text-sm font-medium text-neon-rose transition-all hover:bg-neon-rose/20";
 
 export default function SmtpSettings() {
   const [settings, setSettings] = useState<SmtpSettingsInfo | null>(null);
@@ -102,42 +114,52 @@ export default function SmtpSettings() {
   };
 
   if (loading) {
-    return <div className="text-sm text-slate-500">Loading SMTP settings...</div>;
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-400">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-neon-cyan border-t-transparent" />
+        Loading SMTP settings...
+      </div>
+    );
   }
 
   return (
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">SMTP Configuration</h2>
-          <p className="mt-1 text-sm text-slate-500">Configure email delivery settings</p>
+          <h2 className="text-lg font-semibold text-white">SMTP Configuration</h2>
+          <p className="mt-1 text-sm text-slate-400">Configure email delivery settings</p>
         </div>
         {settings && (
-          <button
-            onClick={handleDelete}
-            className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-          >
+          <button type="button" onClick={handleDelete} className={dangerBtnClasses}>
             Delete Configuration
           </button>
         )}
       </div>
 
       {error && (
-        <div className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-4 rounded-lg border border-neon-rose/30 bg-neon-rose/10 px-4 py-3 text-sm text-neon-rose"
+        >
           {error}
-        </div>
+        </motion.div>
       )}
 
       {success && (
-        <div className="mt-4 rounded-md bg-green-50 p-3 text-sm text-green-700">
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-4 rounded-lg border border-neon-emerald/30 bg-neon-emerald/10 px-4 py-3 text-sm text-neon-emerald"
+        >
           {success}
-        </div>
+        </motion.div>
       )}
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-6">
         <div className="grid gap-6 sm:grid-cols-2">
           <div>
-            <label htmlFor="host" className="block text-sm font-medium text-slate-700">
+            <label htmlFor="host" className={labelClasses}>
               SMTP Host
             </label>
             <input
@@ -147,15 +169,15 @@ export default function SmtpSettings() {
               onChange={(e) => setHost(e.target.value)}
               required
               placeholder="smtp.mailgun.org"
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className={inputClasses}
             />
             <p className="mt-2 text-xs text-slate-500">
-              Mailgun default: <span className="font-medium">smtp.mailgun.org</span>
+              Mailgun default: <span className="font-medium text-slate-400">smtp.mailgun.org</span>
             </p>
           </div>
 
           <div>
-            <label htmlFor="port" className="block text-sm font-medium text-slate-700">
+            <label htmlFor="port" className={labelClasses}>
               Port
             </label>
             <input
@@ -166,16 +188,17 @@ export default function SmtpSettings() {
               required
               min={1}
               max={65535}
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className={inputClasses}
             />
             <p className="mt-2 text-xs text-slate-500">
-              Mailgun typically uses <span className="font-medium">587 (TLS)</span> or <span className="font-medium">465 (SSL)</span>.
+              Mailgun typically uses <span className="font-medium text-slate-400">587 (TLS)</span> or{" "}
+              <span className="font-medium text-slate-400">465 (SSL)</span>.
             </p>
           </div>
 
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-slate-700">
-              Username <span className="text-slate-400">(Mailgun: postmaster@YOUR_DOMAIN)</span>
+            <label htmlFor="username" className={labelClasses}>
+              Username <span className="text-slate-500">(Mailgun: postmaster@YOUR_DOMAIN)</span>
             </label>
             <input
               id="username"
@@ -183,16 +206,14 @@ export default function SmtpSettings() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="postmaster@mg.example.com"
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className={inputClasses}
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+            <label htmlFor="password" className={labelClasses}>
               Password{" "}
-              {settings?.hasPassword && (
-                <span className="text-slate-400">(leave blank to keep current)</span>
-              )}
+              {settings?.hasPassword && <span className="text-slate-500">(leave blank to keep current)</span>}
             </label>
             <input
               id="password"
@@ -200,12 +221,12 @@ export default function SmtpSettings() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={settings?.hasPassword ? "Leave blank to keep current" : "Mailgun SMTP password"}
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className={inputClasses}
             />
           </div>
 
           <div>
-            <label htmlFor="fromEmail" className="block text-sm font-medium text-slate-700">
+            <label htmlFor="fromEmail" className={labelClasses}>
               From Email
             </label>
             <input
@@ -215,13 +236,13 @@ export default function SmtpSettings() {
               onChange={(e) => setFromEmail(e.target.value)}
               required
               placeholder="alerts@mg.example.com"
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className={inputClasses}
             />
           </div>
 
           <div>
-            <label htmlFor="fromName" className="block text-sm font-medium text-slate-700">
-              From Name <span className="text-slate-400">(optional)</span>
+            <label htmlFor="fromName" className={labelClasses}>
+              From Name <span className="text-slate-500">(optional)</span>
             </label>
             <input
               id="fromName"
@@ -229,31 +250,41 @@ export default function SmtpSettings() {
               value={fromName}
               onChange={(e) => setFromName(e.target.value)}
               placeholder="Edge Monitoring"
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className={inputClasses}
             />
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3">
           <input
             id="secure"
             type="checkbox"
             checked={secure}
             onChange={(e) => setSecure(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+            className="h-4 w-4 rounded border-slate-600 bg-obsidian-800 text-neon-cyan focus:ring-neon-cyan/50 focus:ring-offset-obsidian-900"
           />
-          <label htmlFor="secure" className="text-sm text-slate-700">
+          <label htmlFor="secure" className="text-sm text-slate-300">
             Use TLS (recommended)
           </label>
         </div>
 
         <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Settings"}
+          <button type="submit" disabled={saving} className={primaryBtnClasses}>
+            {saving ? (
+              <span className="flex items-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Saving...
+              </span>
+            ) : (
+              "Save Settings"
+            )}
           </button>
         </div>
       </form>

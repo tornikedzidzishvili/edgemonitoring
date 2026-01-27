@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import { api, type SharedHostingSummary } from "../lib/api";
 import { formatDateTime } from "../lib/format";
+
+const inputClasses =
+  "w-full rounded-lg border border-slate-700/50 bg-obsidian-800 px-4 py-2.5 text-sm text-white placeholder-slate-500 transition-all focus:border-neon-cyan/50 focus:outline-none focus:ring-2 focus:ring-neon-cyan/20";
+
+const primaryBtnClasses =
+  "rounded-lg bg-gradient-to-r from-neon-cyan to-neon-emerald px-5 py-2.5 text-sm font-semibold text-obsidian-900 shadow-lg shadow-neon-cyan/20 transition-all hover:shadow-neon-cyan/30 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed";
 
 export default function SharedHosting() {
   const [accounts, setAccounts] = useState<SharedHostingSummary[]>([]);
@@ -54,63 +61,113 @@ export default function SharedHosting() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">Shared Hosting</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Monitor domains on shared hosting accounts. Track HTTP availability, DNS changes, and SSL certificate expiry.
-        </p>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-6"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-display font-bold text-white">Shared Hosting</h1>
+          <p className="mt-1 text-sm text-slate-400">
+            Monitor domains on shared hosting accounts. Track HTTP availability, DNS changes, and SSL certificate expiry.
+          </p>
+        </div>
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-neon-violet/20 to-neon-cyan/10 text-neon-violet">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+        </div>
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-lg border border-neon-rose/30 bg-neon-rose/10 px-4 py-3 text-sm text-neon-rose"
+        >
+          {error}
+        </motion.div>
       )}
 
       {/* Create Account Form */}
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-medium text-slate-900">Add Shared Hosting Account</h2>
+      <div className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-6 shadow-xl backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-neon-cyan/10">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </div>
+          <h2 className="font-medium text-white">Add Shared Hosting Account</h2>
+        </div>
         <form onSubmit={onCreate} className="flex gap-3">
           <input
             type="text"
             placeholder="Account name (e.g., Hostinger, Bluehost)"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className={inputClasses + " flex-1"}
           />
-          <button
-            type="submit"
-            disabled={creating || !name.trim()}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
-          >
-            {creating ? "Creating..." : "Add Account"}
+          <button type="submit" disabled={creating || !name.trim()} className={primaryBtnClasses}>
+            {creating ? (
+              <span className="flex items-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Creating...
+              </span>
+            ) : (
+              "Add Account"
+            )}
           </button>
         </form>
       </div>
 
       {/* Accounts List */}
       {loading ? (
-        <div className="py-8 text-center text-slate-500">Loading...</div>
+        <div className="py-12 text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-neon-cyan border-t-transparent" />
+          <p className="mt-3 text-sm text-slate-400">Loading accounts...</p>
+        </div>
       ) : accounts.length === 0 ? (
-        <div className="py-8 text-center text-slate-500">
-          No shared hosting accounts yet. Create one above to start monitoring domains.
+        <div className="rounded-xl border border-slate-700/30 bg-obsidian-800/30 py-12 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-700/30">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+          </div>
+          <div className="mt-4 text-sm font-medium text-slate-400">No shared hosting accounts yet</div>
+          <div className="mt-1 text-xs text-slate-500">Create one above to start monitoring domains</div>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {accounts.map((account) => (
-            <div
+          {accounts.map((account, idx) => (
+            <motion.div
               key={account.id}
-              className="rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className="group rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 shadow-xl backdrop-blur-sm transition-all hover:border-slate-600/50 hover:bg-obsidian-800/60"
             >
               <div className="flex items-start justify-between">
                 <Link
                   to={`/shared-hosting/${account.id}`}
-                  className="text-base font-medium text-slate-900 hover:text-slate-700"
+                  className="text-lg font-medium text-white transition-colors group-hover:text-neon-cyan"
                 >
                   {account.name}
                 </Link>
                 <button
+                  type="button"
                   onClick={() => onDelete(account.id)}
-                  className="text-slate-400 hover:text-red-600"
+                  className="rounded-lg p-1.5 text-slate-500 transition-all hover:bg-neon-rose/10 hover:text-neon-rose"
                   title="Delete account"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -119,38 +176,46 @@ export default function SharedHosting() {
                 </button>
               </div>
 
-              <div className="mt-3 flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-1.5 text-slate-600">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                  </svg>
+              <div className="mt-4 flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-2 text-slate-400">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-700/50">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                    </svg>
+                  </div>
                   <span>{account.domainCount} domain{account.domainCount !== 1 ? "s" : ""}</span>
                 </div>
 
                 {account.issuesCount > 0 && (
-                  <div className="flex items-center gap-1.5 text-amber-600">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
+                  <div className="flex items-center gap-2 text-neon-amber">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neon-amber/10">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
                     <span>{account.issuesCount} issue{account.issuesCount !== 1 ? "s" : ""}</span>
                   </div>
                 )}
               </div>
 
-              <div className="mt-3 text-xs text-slate-400">
+              <div className="mt-4 text-xs text-slate-500">
                 Created {formatDateTime(account.createdAt)}
               </div>
 
               <Link
                 to={`/shared-hosting/${account.id}`}
-                className="mt-3 block text-center text-sm font-medium text-slate-600 hover:text-slate-900"
+                className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-slate-700/50 bg-obsidian-800/60 px-4 py-2.5 text-sm font-medium text-slate-300 transition-all hover:bg-obsidian-700/50 hover:text-white"
               >
-                View Domains &rarr;
+                View Domains
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
               </Link>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

@@ -1,5 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { motion } from "framer-motion";
 import { api, type ServerAlertSettingsInfo } from "../../lib/api";
+
+const inputClasses =
+  "w-full rounded-lg border border-slate-700/50 bg-obsidian-800 px-4 py-2.5 text-sm text-white placeholder-slate-500 transition-all focus:border-neon-cyan/50 focus:outline-none focus:ring-2 focus:ring-neon-cyan/20";
+
+const labelClasses = "block text-sm font-medium text-slate-300 mb-1.5";
+
+const primaryBtnClasses =
+  "rounded-lg bg-gradient-to-r from-neon-cyan to-neon-emerald px-5 py-2.5 text-sm font-semibold text-obsidian-900 shadow-lg shadow-neon-cyan/20 transition-all hover:shadow-neon-cyan/30 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed";
 
 export default function ServerAlertSettings() {
   const [settings, setSettings] = useState<ServerAlertSettingsInfo | null>(null);
@@ -60,28 +69,68 @@ export default function ServerAlertSettings() {
   };
 
   if (loading) {
-    return <div className="text-sm text-slate-500">Loading server alert settings...</div>;
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-400">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-neon-cyan border-t-transparent" />
+        Loading server alert settings...
+      </div>
+    );
   }
 
   return (
     <div>
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Server Alert Thresholds</h2>
-        <p className="mt-1 text-sm text-slate-500">
+        <h2 className="text-lg font-semibold text-white">Server Alert Thresholds</h2>
+        <p className="mt-1 text-sm text-slate-400">
           Configure global thresholds for server alerting. These apply to all servers with alerting enabled unless overridden.
         </p>
       </div>
 
-      {error && <div className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      {success && <div className="mt-4 rounded-md bg-green-50 p-3 text-sm text-green-700">{success}</div>}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-4 rounded-lg border border-neon-rose/30 bg-neon-rose/10 px-4 py-3 text-sm text-neon-rose"
+        >
+          {error}
+        </motion.div>
+      )}
+
+      {success && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-4 rounded-lg border border-neon-emerald/30 bg-neon-emerald/10 px-4 py-3 text-sm text-neon-emerald"
+        >
+          {success}
+        </motion.div>
+      )}
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-6">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <h3 className="text-sm font-medium text-slate-900">CPU Alert</h3>
-          <p className="mt-1 text-xs text-slate-500">Trigger alert when CPU usage exceeds threshold for the specified duration</p>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neon-amber/10">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-neon-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
+                <rect x="9" y="9" width="6" height="6" />
+                <line x1="9" y1="1" x2="9" y2="4" />
+                <line x1="15" y1="1" x2="15" y2="4" />
+                <line x1="9" y1="20" x2="9" y2="23" />
+                <line x1="15" y1="20" x2="15" y2="23" />
+                <line x1="20" y1="9" x2="23" y2="9" />
+                <line x1="20" y1="14" x2="23" y2="14" />
+                <line x1="1" y1="9" x2="4" y2="9" />
+                <line x1="1" y1="14" x2="4" y2="14" />
+              </svg>
+            </div>
             <div>
-              <label htmlFor="cpuThreshold" className="block text-sm font-medium text-slate-700">
+              <h3 className="text-sm font-semibold text-white">CPU Alert</h3>
+              <p className="text-xs text-slate-500">Trigger alert when CPU usage exceeds threshold for the specified duration</p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="cpuThreshold" className={labelClasses}>
                 CPU Threshold (%)
               </label>
               <input
@@ -91,11 +140,11 @@ export default function ServerAlertSettings() {
                 max={100}
                 value={cpuThresholdPct}
                 onChange={(e) => setCpuThresholdPct(Number(e.target.value))}
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                className={inputClasses}
               />
             </div>
             <div>
-              <label htmlFor="cpuDuration" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="cpuDuration" className={labelClasses}>
                 Duration (minutes)
               </label>
               <input
@@ -105,18 +154,30 @@ export default function ServerAlertSettings() {
                 max={60}
                 value={cpuDurationMin}
                 onChange={(e) => setCpuDurationMin(Number(e.target.value))}
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                className={inputClasses}
               />
             </div>
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <h3 className="text-sm font-medium text-slate-900">RAM Alert</h3>
-          <p className="mt-1 text-xs text-slate-500">Trigger alert when RAM usage exceeds threshold for the specified duration</p>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neon-violet/10">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-neon-violet" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 19v-3" />
+                <path d="M10 19v-6" />
+                <path d="M14 19v-9" />
+                <path d="M18 19v-5" />
+              </svg>
+            </div>
             <div>
-              <label htmlFor="ramThreshold" className="block text-sm font-medium text-slate-700">
+              <h3 className="text-sm font-semibold text-white">RAM Alert</h3>
+              <p className="text-xs text-slate-500">Trigger alert when RAM usage exceeds threshold for the specified duration</p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="ramThreshold" className={labelClasses}>
                 RAM Threshold (%)
               </label>
               <input
@@ -126,11 +187,11 @@ export default function ServerAlertSettings() {
                 max={100}
                 value={ramThresholdPct}
                 onChange={(e) => setRamThresholdPct(Number(e.target.value))}
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                className={inputClasses}
               />
             </div>
             <div>
-              <label htmlFor="ramDuration" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="ramDuration" className={labelClasses}>
                 Duration (minutes)
               </label>
               <input
@@ -140,17 +201,27 @@ export default function ServerAlertSettings() {
                 max={60}
                 value={ramDurationMin}
                 onChange={(e) => setRamDurationMin(Number(e.target.value))}
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                className={inputClasses}
               />
             </div>
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <h3 className="text-sm font-medium text-slate-900">Offline Detection</h3>
-          <p className="mt-1 text-xs text-slate-500">Trigger alert when server hasn't reported for the specified time</p>
-          <div className="mt-3">
-            <label htmlFor="offlineTimeout" className="block text-sm font-medium text-slate-700">
+        <div className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neon-rose/10">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-neon-rose" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+                <line x1="12" y1="2" x2="12" y2="12" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-white">Offline Detection</h3>
+              <p className="text-xs text-slate-500">Trigger alert when server hasn't reported for the specified time</p>
+            </div>
+          </div>
+          <div className="max-w-xs">
+            <label htmlFor="offlineTimeout" className={labelClasses}>
               Offline Timeout (minutes)
             </label>
             <input
@@ -160,28 +231,41 @@ export default function ServerAlertSettings() {
               max={60}
               value={offlineTimeoutMin}
               onChange={(e) => setOfflineTimeoutMin(Number(e.target.value))}
-              className="mt-1 block w-full max-w-xs rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className={inputClasses}
             />
           </div>
         </div>
 
-        <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">
-          Alerts repeat every 30 minutes until resolved. Enable alerting per-server in the Servers page.
+        <div className="flex items-center gap-3 rounded-lg border border-neon-amber/30 bg-neon-amber/10 p-4">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-amber shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <p className="text-sm text-neon-amber">
+            Alerts repeat every 30 minutes until resolved. Enable alerting per-server in the Servers page.
+          </p>
         </div>
 
         <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Settings"}
+          <button type="submit" disabled={saving} className={primaryBtnClasses}>
+            {saving ? (
+              <span className="flex items-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Saving...
+              </span>
+            ) : (
+              "Save Settings"
+            )}
           </button>
         </div>
       </form>
 
       {settings && (
-        <p className="mt-4 text-xs text-slate-400">
+        <p className="mt-6 text-xs text-slate-500">
           Last updated: {new Date(settings.updatedAt).toLocaleString()}
         </p>
       )}
