@@ -222,7 +222,11 @@ export default function SharedHostingSettings() {
       const result = await api.syncSharedHostingServer(editingServer.id, selectedArray);
 
       if (result.success) {
-        setSuccess(`Synced ${result.syncedDomainsCount} domains from ${result.domainsCount} available (${result.customersCount} customers)`);
+        let message = `Synced ${result.syncedDomainsCount} new domains from ${result.domainsCount} available (${result.customersCount} customers)`;
+        if (result.removedDomainsCount && result.removedDomainsCount > 0) {
+          message += `, removed ${result.removedDomainsCount} stale domains`;
+        }
+        setSuccess(message);
         await loadServers();
         // Refresh synced domains
         const syncedRes = await api.getSyncedDomains(editingServer.id);

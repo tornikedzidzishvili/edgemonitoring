@@ -79,6 +79,7 @@ export interface PleskSyncResult {
   customersCount: number;
   domainsCount: number;
   syncedDomainsCount: number;
+  removedDomainsCount?: number;
   error?: string;
   customers: PleskCustomer[];
   domains: PleskDomain[];
@@ -444,6 +445,33 @@ export async function syncPleskDomains(
       }
     }
 
+    // Remove domains that no longer exist in Plesk (only if syncAll is true)
+    let removedDomainsCount = 0;
+    if (server?.syncAll) {
+      const pleskDomainNames = new Set(domains.map(d => d.name));
+      const existingAccounts = await prisma.sharedHosting.findMany({
+        where: { serverId },
+        include: { domains: true }
+      });
+      
+      for (const account of existingAccounts) {
+        for (const domain of account.domains) {
+          if (!pleskDomainNames.has(domain.domain)) {
+            await prisma.sharedHostingDomain.delete({ where: { id: domain.id } });
+            removedDomainsCount++;
+          }
+        }
+        
+        // Remove empty accounts
+        const remainingDomains = await prisma.sharedHostingDomain.count({
+          where: { sharedHostingId: account.id }
+        });
+        if (remainingDomains === 0) {
+          await prisma.sharedHosting.delete({ where: { id: account.id } });
+        }
+      }
+    }
+
     // Update server last sync time
     await prisma.sharedHostingServer.update({
       where: { id: serverId },
@@ -458,6 +486,7 @@ export async function syncPleskDomains(
       customersCount: customers.length,
       domainsCount: domains.length,
       syncedDomainsCount,
+      removedDomainsCount,
       customers,
       domains
     };

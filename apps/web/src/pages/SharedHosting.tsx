@@ -18,7 +18,9 @@ export default function SharedHosting() {
   const [servers, setServers] = useState<SharedHostingServerInfo[]>([]);
   const [selectedServerId, setSelectedServerId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -80,6 +82,36 @@ export default function SharedHosting() {
     }
   }
 
+  async function handleResync() {
+    if (!selectedServerId) return;
+    const server = servers.find(s => s.id === selectedServerId);
+    if (!server || server.type !== "plesk") return;
+
+    setSyncing(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await api.syncSharedHostingServer(selectedServerId);
+      if (result.success) {
+        let message = `Synced ${result.syncedDomainsCount} new domains from ${result.domainsCount} available`;
+        if (result.removedDomainsCount && result.removedDomainsCount > 0) {
+          message += `, removed ${result.removedDomainsCount} stale`;
+        }
+        setSuccess(message);
+        await refresh();
+      } else {
+        setError(result.error || "Sync failed");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  const selectedServer = servers.find(s => s.id === selectedServerId);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -114,9 +146,19 @@ export default function SharedHosting() {
         </motion.div>
       )}
 
+      {success && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-lg border border-neon-emerald/30 bg-neon-emerald/10 px-4 py-3 text-sm text-neon-emerald"
+        >
+          {success}
+        </motion.div>
+      )}
+
       {/* Server Filter */}
       {servers.length > 0 && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <label htmlFor="server-filter" className="text-sm text-slate-400">Filter by server:</label>
           <select
             id="server-filter"
@@ -138,6 +180,33 @@ export default function SharedHosting() {
               className="text-sm text-neon-cyan hover:underline"
             >
               Clear filter
+            </button>
+          )}
+          {selectedServer?.type === "plesk" && (
+            <button
+              type="button"
+              onClick={handleResync}
+              disabled={syncing}
+              className="ml-auto rounded-lg border border-neon-cyan/30 bg-neon-cyan/10 px-4 py-2 text-sm font-medium text-neon-cyan transition-all hover:bg-neon-cyan/20 disabled:opacity-50"
+            >
+              {syncing ? (
+                <span className="flex items-center gap-2">
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Syncing...
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="23 4 23 10 17 10" />
+                    <polyline points="1 20 1 14 7 14" />
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                  </svg>
+                  Resync from Plesk
+                </span>
+              )}
             </button>
           )}
         </div>

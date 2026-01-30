@@ -689,6 +689,7 @@ export const api = {
       customersCount: number;
       domainsCount: number;
       syncedDomainsCount: number;
+      removedDomainsCount?: number;
       error?: string;
     }>(`/settings/shared-hosting/servers/${encodeURIComponent(id)}/sync`, { selectedDomains }),
   getAvailableDomains: (serverId: string) =>
