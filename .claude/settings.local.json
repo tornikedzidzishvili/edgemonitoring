@@ -16,7 +16,10 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd server alerting system with CPU/RAM/offline monitoring\n\n- Add database models: ServerAlertSettings \\(global thresholds\\),\n  ServerAlertConfig \\(per-server toggle\\), ServerAlert \\(active/resolved\\)\n- Add scheduler that checks thresholds every 60s and auto-resolves\n- Send SMS/email on first alert, repeat every 30 min until resolved\n- Add Alerts page with list view and Resolve button\n- Add Server Alerts tab in Settings for global thresholds\n- Add alerting toggle in server edit form\n- Add alerts widget on Dashboard showing active count by type\n- Add Alerts nav item with bell icon\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git push)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(cat:*)",
+      "Bash(ipconfig:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

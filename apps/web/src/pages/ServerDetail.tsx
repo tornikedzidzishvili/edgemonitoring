@@ -495,29 +495,88 @@ export default function ServerDetailPage() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { label: "CPU Load", value: latestSnap?.cpuLoad !== undefined ? `${latestSnap.cpuLoad.toFixed(1)}%` : "—", sub: "Current load average", color: "neon-cyan" },
-          { label: "Memory", value: latestSnap?.memUsed !== undefined && latestSnap?.memTotal !== undefined && latestSnap.memTotal > 0 ? `${((latestSnap.memUsed / latestSnap.memTotal) * 100).toFixed(1)}%` : "—", sub: `${formatBytes(latestSnap?.memUsed)} / ${formatBytes(latestSnap?.memTotal)}`, color: "neon-violet" },
-          { label: "Endpoints", value: endpoints.length.toString(), sub: `${endpoints.filter((e) => e.lastCheck?.ok).length} up`, color: "neon-emerald" },
-          { label: "Containers", value: (latestSnap?.containers?.length ?? 0).toString(), sub: monitorDocker ? "Docker monitoring enabled" : "Docker monitoring disabled", color: "neon-amber" }
-        ].map((stat, idx) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.05 }}
-            className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
-          >
-            <div className="flex items-center gap-3">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-lg bg-${stat.color}/10`}>
-                <div className={`h-5 w-5 rounded-full bg-${stat.color}/30`} />
-              </div>
-              <span className="text-sm font-medium text-slate-400">{stat.label}</span>
+        {/* CPU Load */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0 }}
+          className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-cyan/10">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+                <rect x="9" y="9" width="6" height="6" />
+                <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
+              </svg>
             </div>
-            <div className="mt-3 text-3xl font-bold text-white">{stat.value}</div>
-            <div className="mt-1 text-xs text-slate-500">{stat.sub}</div>
-          </motion.div>
-        ))}
+            <span className="text-sm font-medium text-slate-400">CPU Load</span>
+          </div>
+          <div className="mt-3 text-3xl font-bold text-white">{latestSnap?.cpuLoad !== undefined ? `${latestSnap.cpuLoad.toFixed(1)}%` : "—"}</div>
+          <div className="mt-1 text-xs text-slate-500">Current load average</div>
+        </motion.div>
+
+        {/* Memory */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-violet/10">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-violet" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 19v-3M10 19v-3M14 19v-3M18 19v-3M6 8v-3M10 8v-3M14 8v-3M18 8v-3" />
+                <rect x="3" y="8" width="18" height="8" rx="1" />
+              </svg>
+            </div>
+            <span className="text-sm font-medium text-slate-400">Memory</span>
+          </div>
+          <div className="mt-3 text-3xl font-bold text-white">{latestSnap?.memUsed !== undefined && latestSnap?.memTotal !== undefined && latestSnap.memTotal > 0 ? `${((latestSnap.memUsed / latestSnap.memTotal) * 100).toFixed(1)}%` : "—"}</div>
+          <div className="mt-1 text-xs text-slate-500">{formatBytes(latestSnap?.memUsed)} / {formatBytes(latestSnap?.memTotal)}</div>
+        </motion.div>
+
+        {/* Endpoints */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-emerald/10">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+            </div>
+            <span className="text-sm font-medium text-slate-400">Endpoints</span>
+          </div>
+          <div className="mt-3 text-3xl font-bold text-white">{endpoints.length}</div>
+          <div className="mt-1 text-xs text-slate-500">{endpoints.filter((e) => e.lastCheck?.ok).length} up</div>
+        </motion.div>
+
+        {/* Containers */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-amber/10">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 12.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h7.5" />
+                <path d="M18 14v4h4M18 18l4 4" />
+                <path d="M6 8h.01M10 8h.01M14 8h.01" />
+              </svg>
+            </div>
+            <span className="text-sm font-medium text-slate-400">Containers</span>
+          </div>
+          <div className="mt-3 text-3xl font-bold text-white">{latestSnap?.containers?.length ?? 0}</div>
+          <div className="mt-1 text-xs text-slate-500">{monitorDocker ? "Docker monitoring enabled" : "Docker monitoring disabled"}</div>
+        </motion.div>
       </div>
 
       {/* HTTP Endpoints Section */}
@@ -678,34 +737,39 @@ export default function ServerDetailPage() {
         </div>
       ) : null}
 
+      {/* Charts Filter */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700/50 bg-obsidian-800/40 px-5 py-4 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <div className="font-medium text-white">Metrics</div>
+          <div className="text-xs text-slate-400">{metricsLoading ? "Loading..." : `${metrics.length} points`} • {metricsDays}d • {metricsStepMinutes}m step</div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-400">
+            <span>Range</span>
+            <select value={metricsDays} onChange={(e) => setMetricsDays(Number(e.target.value) as 1 | 5 | 15 | 30)} className="rounded-lg border border-slate-700/50 bg-obsidian-800 py-1 pl-2 pr-8 text-xs text-white">
+              <option value={1}>1 day</option>
+              <option value={5}>5 days</option>
+              <option value={15}>15 days</option>
+              <option value={30}>30 days</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-400">
+            <span>Interval</span>
+            <select value={metricsStepMinutes} onChange={(e) => setMetricsStepMinutes(Number(e.target.value) as 5 | 15 | 30 | 60)} className="rounded-lg border border-slate-700/50 bg-obsidian-800 py-1 pl-2 pr-8 text-xs text-white">
+              <option value={5}>5 min</option>
+              <option value={15}>15 min</option>
+              <option value={30}>30 min</option>
+              <option value={60}>60 min</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
       {/* Charts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 backdrop-blur-sm">
           <div className="border-b border-slate-700/50 px-5 py-4">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <div className="font-medium text-white">CPU Load</div>
-              <div className="text-xs text-slate-400">{metricsLoading ? "Loading..." : `${metrics.length} points`} • {metricsDays}d • {metricsStepMinutes}m step</div>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3">
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-400">
-                <span>Range</span>
-                <select value={metricsDays} onChange={(e) => setMetricsDays(Number(e.target.value) as 1 | 5 | 15 | 30)} className="rounded-lg border border-slate-700/50 bg-obsidian-800 py-1 pl-2 pr-8 text-xs text-white">
-                  <option value={1}>1 day</option>
-                  <option value={5}>5 days</option>
-                  <option value={15}>15 days</option>
-                  <option value={30}>30 days</option>
-                </select>
-              </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-400">
-                <span>Interval</span>
-                <select value={metricsStepMinutes} onChange={(e) => setMetricsStepMinutes(Number(e.target.value) as 5 | 15 | 30 | 60)} className="rounded-lg border border-slate-700/50 bg-obsidian-800 py-1 pl-2 pr-8 text-xs text-white">
-                  <option value={5}>5 min</option>
-                  <option value={15}>15 min</option>
-                  <option value={30}>30 min</option>
-                  <option value={60}>60 min</option>
-                </select>
-              </label>
-            </div>
+            <div className="font-medium text-white">CPU Load</div>
           </div>
           <div className="p-5">
             <div className="h-56">

@@ -16,8 +16,10 @@ import { settingsRoutes } from "./routes/settings.js";
 import { serverAlertsRoutes } from "./routes/serverAlerts.js";
 import { profileRoutes } from "./routes/profile.js";
 import { passkeyRoutes } from "./routes/passkeys.js";
+import { sharedHostingServerRoutes } from "./routes/sharedHostingServers.js";
 import { cleanExpiredSessions } from "./services/userAuth.js";
 import { startServerAlertScheduler } from "./serverAlertScheduler.js";
+import { seedDevAdmin } from "./seed.js";
 
 const env = getEnv();
 const app = Fastify({ logger: true });
@@ -32,6 +34,7 @@ await app.register(settingsRoutes);
 await app.register(serverAlertsRoutes);
 await app.register(profileRoutes);
 await app.register(passkeyRoutes);
+await app.register(sharedHostingServerRoutes);
 
 // Clean expired sessions periodically (every hour)
 setInterval(() => {
@@ -1137,17 +1140,33 @@ app.post("/agents/report", async (req) => {
 // ============ SHARED HOSTING ROUTES ============
 
 // List all shared hosting accounts
-app.get("/shared-hosting", async () => {
+app.get("/shared-hosting", async (req) => {
+  const query = z
+    .object({
+      serverId: z.string().optional()
+    })
+    .parse(req.query);
+
   const accounts = await prisma.sharedHosting.findMany({
     orderBy: { createdAt: "desc" },
+    where: query.serverId ? { serverId: query.serverId } : undefined,
     include: {
+      server: {
+        select: {
+          id: true,
+          name: true,
+          type: true
+        }
+      },
       domains: {
         select: {
           id: true,
           domain: true,
           enabled: true,
           sslExpiresAt: true,
-          lastKnownIp: true
+          lastKnownIp: true,
+          customerName: true,
+          customerEmail: true
         }
       }
     }
@@ -1166,9 +1185,27 @@ app.get("/shared-hosting", async () => {
       name: a.name,
       createdAt: a.createdAt,
       domainCount,
-      issuesCount
+      issuesCount,
+      server: a.server,
+      pleskCustomerId: a.pleskCustomerId,
+      pleskLogin: a.pleskLogin
     };
   });
+});
+
+// Get shared hosting servers list (for filtering)
+app.get("/shared-hosting/servers", async () => {
+  const servers = await prisma.sharedHostingServer.findMany({
+    where: { enabled: true },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      type: true
+    }
+  });
+
+  return { servers };
 });
 
 // Get shared hosting account with all domains
@@ -1178,6 +1215,13 @@ app.get("/shared-hosting/:id", async (req) => {
   const account = await prisma.sharedHosting.findUnique({
     where: { id: params.id },
     include: {
+      server: {
+        select: {
+          id: true,
+          name: true,
+          type: true
+        }
+      },
       domains: {
         orderBy: { createdAt: "desc" }
       }
@@ -1206,6 +1250,8 @@ app.get("/shared-hosting/:id", async (req) => {
         domain: d.domain,
         enabled: d.enabled,
         createdAt: d.createdAt,
+        customerName: d.customerName,
+        customerEmail: d.customerEmail,
         sslExpiresAt: d.sslExpiresAt,
         sslIssuer: d.sslIssuer,
         sslStatus: getSslStatus(d.sslExpiresAt),
@@ -1232,6 +1278,9 @@ app.get("/shared-hosting/:id", async (req) => {
     id: account.id,
     name: account.name,
     createdAt: account.createdAt,
+    server: account.server,
+    pleskCustomerId: account.pleskCustomerId,
+    pleskLogin: account.pleskLogin,
     domains: domainsWithStatus
   };
 });
@@ -1423,5 +1472,8 @@ app.delete("/admin/shared-hosting/:id/domains/:domainId", async (req) => {
 startUptimeScheduler(prisma, env);
 startDomainScheduler(prisma, env);
 startServerAlertScheduler(prisma, env);
+
+// Seed dev admin user in development mode
+await seedDevAdmin();
 
 await app.listen({ port: env.PORT, host: "0.0.0.0" });

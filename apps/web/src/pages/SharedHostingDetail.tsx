@@ -212,6 +212,21 @@ export default function SharedHostingDetailPage() {
             Shared Hosting
           </Link>
           <h1 className="mt-2 text-2xl font-display font-bold text-white">{account.name}</h1>
+          {account.server && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${account.server.type === "plesk" ? "bg-neon-violet/10 text-neon-violet" : "bg-slate-700 text-slate-400"}`}>
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                </svg>
+                {account.server.name}
+              </span>
+              {account.pleskLogin && (
+                <span className="text-xs text-slate-500">
+                  Customer: {account.pleskLogin}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-neon-violet/20 to-neon-cyan/10 text-neon-violet">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -316,18 +331,26 @@ export default function SharedHostingDetailPage() {
                     className={`transition-colors hover:bg-obsidian-700/30 ${!domain.enabled ? "opacity-50" : ""}`}
                   >
                     <td className="whitespace-nowrap px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={`https://${domain.domain}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-white hover:text-neon-cyan transition-colors"
-                        >
-                          {domain.domain}
-                        </a>
-                        {!domain.enabled && (
-                          <span className="rounded-full border border-slate-600/30 bg-slate-600/10 px-2 py-0.5 text-xs text-slate-400">
-                            Disabled
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`https://${domain.domain}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-white hover:text-neon-cyan transition-colors"
+                          >
+                            {domain.domain}
+                          </a>
+                          {!domain.enabled && (
+                            <span className="rounded-full border border-slate-600/30 bg-slate-600/10 px-2 py-0.5 text-xs text-slate-400">
+                              Disabled
+                            </span>
+                          )}
+                        </div>
+                        {domain.customerName && (
+                          <span className="text-xs text-slate-500">
+                            {domain.customerName}
+                            {domain.customerEmail && ` • ${domain.customerEmail}`}
                           </span>
                         )}
                       </div>

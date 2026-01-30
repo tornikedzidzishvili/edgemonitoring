@@ -1,26 +1,40 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { api, type SharedHostingSummary } from "../lib/api";
+import { api, type SharedHostingSummary, type SharedHostingServerInfo } from "../lib/api";
 import { formatDateTime } from "../lib/format";
 
 const inputClasses =
   "w-full rounded-lg border border-slate-700/50 bg-obsidian-800 px-4 py-2.5 text-sm text-white placeholder-slate-500 transition-all focus:border-neon-cyan/50 focus:outline-none focus:ring-2 focus:ring-neon-cyan/20";
+
+const selectClasses =
+  "rounded-lg border border-slate-700/50 bg-obsidian-800 px-4 py-2.5 text-sm text-white transition-all focus:border-neon-cyan/50 focus:outline-none focus:ring-2 focus:ring-neon-cyan/20";
 
 const primaryBtnClasses =
   "rounded-lg bg-gradient-to-r from-neon-cyan to-neon-emerald px-5 py-2.5 text-sm font-semibold text-obsidian-900 shadow-lg shadow-neon-cyan/20 transition-all hover:shadow-neon-cyan/30 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed";
 
 export default function SharedHosting() {
   const [accounts, setAccounts] = useState<SharedHostingSummary[]>([]);
+  const [servers, setServers] = useState<SharedHostingServerInfo[]>([]);
+  const [selectedServerId, setSelectedServerId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
+  async function loadServers() {
+    try {
+      const data = await api.sharedHostingServersPublic();
+      setServers(data.servers);
+    } catch (e) {
+      // Servers may not be configured yet
+    }
+  }
+
   async function refresh() {
     try {
-      const data = await api.sharedHosting();
+      const data = await api.sharedHosting(selectedServerId || undefined);
       setAccounts(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load shared hosting accounts");
@@ -30,8 +44,14 @@ export default function SharedHosting() {
   }
 
   useEffect(() => {
+    loadServers();
     refresh();
   }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    refresh();
+  }, [selectedServerId]);
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -92,6 +112,35 @@ export default function SharedHosting() {
         >
           {error}
         </motion.div>
+      )}
+
+      {/* Server Filter */}
+      {servers.length > 0 && (
+        <div className="flex items-center gap-3">
+          <label htmlFor="server-filter" className="text-sm text-slate-400">Filter by server:</label>
+          <select
+            id="server-filter"
+            value={selectedServerId}
+            onChange={(e) => setSelectedServerId(e.target.value)}
+            className={selectClasses}
+          >
+            <option value="">All Servers</option>
+            {servers.map((server) => (
+              <option key={server.id} value={server.id}>
+                {server.name} ({server.type === "plesk" ? "Plesk" : "Manual"})
+              </option>
+            ))}
+          </select>
+          {selectedServerId && (
+            <button
+              type="button"
+              onClick={() => setSelectedServerId("")}
+              className="text-sm text-neon-cyan hover:underline"
+            >
+              Clear filter
+            </button>
+          )}
+        </div>
       )}
 
       {/* Create Account Form */}
@@ -158,12 +207,29 @@ export default function SharedHosting() {
               className="group rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 shadow-xl backdrop-blur-sm transition-all hover:border-slate-600/50 hover:bg-obsidian-800/60"
             >
               <div className="flex items-start justify-between">
-                <Link
-                  to={`/shared-hosting/${account.id}`}
-                  className="text-lg font-medium text-white transition-colors group-hover:text-neon-cyan"
-                >
-                  {account.name}
-                </Link>
+                <div>
+                  <Link
+                    to={`/shared-hosting/${account.id}`}
+                    className="text-lg font-medium text-white transition-colors group-hover:text-neon-cyan"
+                  >
+                    {account.name}
+                  </Link>
+                  {account.server && (
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${account.server.type === "plesk" ? "bg-neon-violet/10 text-neon-violet" : "bg-slate-700 text-slate-400"}`}>
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                        </svg>
+                        {account.server.name}
+                      </span>
+                    </div>
+                  )}
+                  {account.pleskLogin && (
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Customer: {account.pleskLogin}
+                    </p>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => onDelete(account.id)}

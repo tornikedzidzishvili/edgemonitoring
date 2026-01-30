@@ -187,11 +187,53 @@ model AlertTemplate {
   updatedAt    DateTime @updatedAt
 }
 
+// Shared Hosting Server Configuration (e.g., Plesk servers)
+model SharedHostingServer {
+  id             String   @id @default(cuid())
+  name           String   // Label for this server (e.g., "Production Plesk", "Staging")
+  type           String   @default("plesk") // "plesk" | "manual" (for future: cpanel, directadmin, etc.)
+  apiUrl         String?  // Base URL for API (e.g., https://plesk.example.com:8443)
+  
+  // Encrypted API credentials
+  apiKeyEnc      String?
+  apiKeyIv       String?
+  apiKeyTag      String?
+  
+  // Optional: username/password auth for some panels
+  usernameEnc    String?
+  usernameIv     String?
+  usernameTag    String?
+  passwordEnc    String?
+  passwordIv     String?
+  passwordTag    String?
+  
+  syncAll        Boolean  @default(true) // Sync all domains or only selected ones
+  lastSyncAt     DateTime?
+  lastSyncError  String?
+  
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  accounts       SharedHosting[]
+}
+
 model SharedHosting {
   id        String   @id @default(cuid())
-  name      String
+  name      String   // Customer/Account name
+  
+  // Link to hosting server (optional for backward compatibility)
+  serverId  String?
+  server    SharedHostingServer? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  
+  // Plesk-specific identifiers
+  pleskCustomerId String?
+  pleskLogin      String?
+  
   createdAt DateTime @default(now())
   domains   SharedHostingDomain[]
+  
+  @@index([serverId])
 }
 
 model SharedHostingDomain {
@@ -201,6 +243,10 @@ model SharedHostingDomain {
   domain          String
   enabled         Boolean  @default(true)
   createdAt       DateTime @default(now())
+
+  // Customer info from Plesk
+  customerName    String?
+  customerEmail   String?
 
   // SSL tracking
   sslExpiresAt    DateTime?

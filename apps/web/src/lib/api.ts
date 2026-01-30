@@ -334,12 +334,21 @@ export type AlertCountResponse = {
 
 export type SslStatus = "valid" | "warning" | "critical" | "unknown";
 
+export type SharedHostingServerInfo = {
+  id: string;
+  name: string;
+  type: string;
+};
+
 export type SharedHostingSummary = {
   id: string;
   name: string;
   createdAt: string;
   domainCount: number;
   issuesCount: number;
+  server: SharedHostingServerInfo | null;
+  pleskCustomerId: string | null;
+  pleskLogin: string | null;
 };
 
 export type DomainCheckInfo = {
@@ -357,6 +366,8 @@ export type SharedHostingDomainInfo = {
   domain: string;
   enabled: boolean;
   createdAt: string;
+  customerName: string | null;
+  customerEmail: string | null;
   sslExpiresAt: string | null;
   sslIssuer: string | null;
   sslStatus: SslStatus;
@@ -371,7 +382,53 @@ export type SharedHostingDetail = {
   id: string;
   name: string;
   createdAt: string;
+  server: SharedHostingServerInfo | null;
+  pleskCustomerId: string | null;
+  pleskLogin: string | null;
   domains: SharedHostingDomainInfo[];
+};
+
+// Shared Hosting Server Settings Types
+export type SharedHostingServerDetail = {
+  id: string;
+  name: string;
+  type: "plesk" | "manual";
+  apiUrl: string | null;
+  hasApiKey: boolean;
+  hasCredentials: boolean;
+  syncAll: boolean;
+  lastSyncAt: string | null;
+  lastSyncError: string | null;
+  enabled: boolean;
+  accountsCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SharedHostingServerAccount = {
+  id: string;
+  name: string;
+  pleskCustomerId: string | null;
+  pleskLogin: string | null;
+  domainsCount: number;
+};
+
+export type PleskAvailableDomain = {
+  name: string;
+  owner: string | null;
+  ownerEmail: string | null;
+  hostingType: string;
+};
+
+export type SyncedDomain = {
+  id: string;
+  domain: string;
+  customerName: string | null;
+  customerEmail: string | null;
+  enabled: boolean;
+  createdAt: string;
+  accountId: string;
+  accountName: string;
 };
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
@@ -554,7 +611,11 @@ export const api = {
     apiPost<AlertTemplatesResponse>(`/settings/templates/alerts`, params),
 
   // Shared Hosting
-  sharedHosting: () => apiGet<SharedHostingSummary[]>(`/shared-hosting`),
+  sharedHosting: (serverId?: string) => {
+    const params = serverId ? `?serverId=${encodeURIComponent(serverId)}` : "";
+    return apiGet<SharedHostingSummary[]>(`/shared-hosting${params}`);
+  },
+  sharedHostingServersPublic: () => apiGet<{ servers: SharedHostingServerInfo[] }>(`/shared-hosting/servers`),
   sharedHostingDetail: (id: string) => apiGet<SharedHostingDetail>(`/shared-hosting/${encodeURIComponent(id)}`),
   sharedHostingDomainHistory: (id: string, domainId: string, range: "24h" | "7d" | "30d" = "24h") =>
     apiGet<DomainCheckInfo[]>(`/shared-hosting/${encodeURIComponent(id)}/domains/${encodeURIComponent(domainId)}/history?range=${range}`),
@@ -579,6 +640,69 @@ export const api = {
   adminDeleteDomain: (sharedHostingId: string, domainId: string) =>
     apiDelete<{ ok: boolean }>(
       `/admin/shared-hosting/${encodeURIComponent(sharedHostingId)}/domains/${encodeURIComponent(domainId)}`
+    ),
+
+  // Shared Hosting Server Management (Settings)
+  sharedHostingServers: () => apiGet<{ servers: SharedHostingServerDetail[] }>(`/settings/shared-hosting/servers`),
+  sharedHostingServer: (id: string) =>
+    apiGet<{ server: SharedHostingServerDetail & { accounts: SharedHostingServerAccount[] } }>(
+      `/settings/shared-hosting/servers/${encodeURIComponent(id)}`
+    ),
+  createSharedHostingServer: (params: {
+    name: string;
+    type?: "plesk" | "manual";
+    apiUrl?: string;
+    apiKey?: string;
+    username?: string;
+    password?: string;
+    syncAll?: boolean;
+    enabled?: boolean;
+  }) => apiPost<{ server: SharedHostingServerDetail }>(`/settings/shared-hosting/servers`, params),
+  updateSharedHostingServer: (
+    id: string,
+    params: {
+      name?: string;
+      type?: "plesk" | "manual";
+      apiUrl?: string | null;
+      apiKey?: string | null;
+      username?: string | null;
+      password?: string | null;
+      syncAll?: boolean;
+      enabled?: boolean;
+    }
+  ) => apiPatch<{ server: SharedHostingServerDetail }>(`/settings/shared-hosting/servers/${encodeURIComponent(id)}`, params),
+  deleteSharedHostingServer: (id: string) =>
+    apiDelete<{ ok: boolean }>(`/settings/shared-hosting/servers/${encodeURIComponent(id)}`),
+  testSharedHostingServer: (id: string) =>
+    apiPost<{ ok: boolean; message: string; serverInfo?: unknown }>(
+      `/settings/shared-hosting/servers/${encodeURIComponent(id)}/test`,
+      {}
+    ),
+  testSharedHostingConnection: (params: { apiUrl: string; apiKey?: string; username?: string; password?: string }) =>
+    apiPost<{ ok: boolean; message: string; serverInfo?: unknown }>(
+      `/settings/shared-hosting/test-connection`,
+      params
+    ),
+  syncSharedHostingServer: (id: string, selectedDomains?: string[]) =>
+    apiPost<{
+      success: boolean;
+      customersCount: number;
+      domainsCount: number;
+      syncedDomainsCount: number;
+      error?: string;
+    }>(`/settings/shared-hosting/servers/${encodeURIComponent(id)}/sync`, { selectedDomains }),
+  getAvailableDomains: (serverId: string) =>
+    apiGet<{ success: boolean; domains: PleskAvailableDomain[]; error?: string }>(
+      `/settings/shared-hosting/servers/${encodeURIComponent(serverId)}/domains`
+    ),
+  getSyncedDomains: (serverId: string) =>
+    apiGet<{ domains: SyncedDomain[] }>(
+      `/settings/shared-hosting/servers/${encodeURIComponent(serverId)}/synced-domains`
+    ),
+  toggleDomainMonitoring: (serverId: string, domainIds: string[], enabled: boolean) =>
+    apiPost<{ ok: boolean; updatedCount: number }>(
+      `/settings/shared-hosting/servers/${encodeURIComponent(serverId)}/toggle-domains`,
+      { domainIds, enabled }
     ),
 
   // Server Alert Settings

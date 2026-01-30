@@ -1,0 +1,51 @@
+services:
+  api:
+    image: node:20-alpine
+    working_dir: /repo
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - DATABASE_URL=file:/data/edge-monitoring.db
+      - SSH_KEY_MASTER_SECRET=dev-ssh-master-secret-change-me
+      - CHECK_INTERVAL_SECONDS=60
+      - CHECK_TIMEOUT_MS=10000
+      - NODE_ENV=development
+    volumes:
+      - .:/repo
+      - /repo/node_modules
+      - /repo/apps/api/node_modules
+      - /repo/apps/web/node_modules
+      - /repo/apps/agent/node_modules
+      - api_data:/data
+    command: sh -c "npm install && cd /repo/apps/api && npx prisma generate && npx prisma migrate deploy && npm run dev"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  web:
+    image: node:20-alpine
+    working_dir: /repo
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:4000
+      - NODE_ENV=development
+    volumes:
+      - .:/repo
+      - /repo/node_modules
+      - /repo/apps/api/node_modules
+      - /repo/apps/web/node_modules
+      - /repo/apps/agent/node_modules
+    command: sh -c "npm install && cd /repo/apps/web && npm run dev -- --host 0.0.0.0"
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  api_data:
