@@ -13,6 +13,34 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure app directory exists
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PROD_SSH_PASSPHRASE }}
+          script_stop: true
+          script: |
+            set -eu
+            APP_DIR="${{ secrets.PROD_APP_DIR }}"
+            if [ -z "$APP_DIR" ]; then APP_DIR=/opt/edge-monitoring; fi
+            mkdir -p "$APP_DIR"
+
+      # Repo is private; instead of cloning on the server, upload the code over SSH.
+      - name: Upload to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PROD_SSH_PASSPHRASE }}
+          target: ${{ secrets.PROD_APP_DIR }}
+          source: "docker-compose.prod.yml,apps,infra,scripts,package.json,package-lock.json,tsconfig.base.json,README.md,.gitattributes"
+
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -21,32 +49,16 @@ jobs:
           key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.PROD_SSH_PASSPHRASE }}
           script_stop: true
-          command_timeout: 30m
           script: |
             set -eu
 
             APP_DIR="${{ secrets.PROD_APP_DIR }}"
             if [ -z "$APP_DIR" ]; then APP_DIR=/opt/edge-monitoring; fi
-            
-            REPO_URL="https://${{ secrets.GH_PAT }}@github.com/tornikedzidzishvili/edgemonitoring.git"
-            
-            mkdir -p "$APP_DIR"
-            
-            if [ ! -d "$APP_DIR/.git" ]; then
-              echo "[1/3] Cloning repo"
-              git clone "$REPO_URL" "$APP_DIR"
-            else
-              echo "[1/3] Updating repo"
-              cd "$APP_DIR"
-              git remote set-url origin "$REPO_URL"
-              git fetch --all --prune
-              git reset --hard origin/main
-            fi
 
             # Ensure scripts are executable
-            chmod +x "$APP_DIR/scripts/"*.sh || true
+            chmod +x "$APP_DIR/scripts/deploy-prod.sh" || true
 
-            # Deploy
+            # Deploy (skip git since code was uploaded)
             export SKIP_GIT=1
             export FORCE_REBUILD=1
             export SSH_KEY_MASTER_SECRET='${{ secrets.SSH_KEY_MASTER_SECRET }}'
