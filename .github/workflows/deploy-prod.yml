@@ -84,7 +84,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Copy files to server
-        uses: appleboy/scp-action@v0.1.8
+        uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
@@ -94,7 +94,7 @@ jobs:
           source: "docker-compose.prod.yml,infra,scripts"
 
       - name: Deploy to server
-        uses: appleboy/ssh-action@v1.2.1
+        uses: appleboy/ssh-action@v1.2.5
         env:
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
           SSH_KEY_MASTER_SECRET: ${{ secrets.SSH_KEY_MASTER_SECRET }}

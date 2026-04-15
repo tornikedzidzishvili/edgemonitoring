@@ -80,8 +80,8 @@ Use the latest major version tags. As of this writing:
 - `docker/login-action@v4`
 - `docker/setup-buildx-action@v4`
 - `docker/build-push-action@v7`
-- `appleboy/scp-action@v0.1.8`
-- `appleboy/ssh-action@v1.2.1`
+- `appleboy/scp-action@v1`
+- `appleboy/ssh-action@v1.2.5`
 
 When GitHub announces deprecation warnings for Node.js versions in Actions, bump action versions immediately.
 
