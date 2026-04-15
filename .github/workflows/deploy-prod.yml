@@ -131,6 +131,10 @@ jobs:
               else
                 echo "IMAGE_TAG=$IMAGE_TAG" >> "$APP_DIR/.env"
               fi
+              # Ensure HTTPS proxy config (may be stale from older deploy)
+              if grep -q '^PROXY_CONF=.*nginx.http.conf' "$APP_DIR/.env"; then
+                sed -i "s|^PROXY_CONF=.*|PROXY_CONF=./infra/proxy/nginx.https.conf|" "$APP_DIR/.env"
+              fi
             fi
 
             docker pull ghcr.io/tornikedzidzishvili/edge-monitoring-api:"$IMAGE_TAG"
