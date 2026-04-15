@@ -154,7 +154,7 @@ export async function passkeyRoutes(app: FastifyInstance) {
     });
 
     // Store challenge with a temporary ID
-    const challengeId = `auth-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const challengeId = `auth-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     challenges.set(challengeId, {
       challenge: options.challenge,
       expiresAt: Date.now() + 5 * 60 * 1000

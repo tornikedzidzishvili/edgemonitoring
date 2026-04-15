@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Env } from "./env.js";
 import { decryptString } from "./cryptoBox.js";
 import nodemailer from "nodemailer";
+import { webAppDownHtml, serverAlertHtml, testNotificationHtml } from "./emailTemplates.js";
 
 type AlertVars = {
   name: string;
@@ -57,7 +58,7 @@ async function getOrCreateAlertTemplate(prisma: PrismaClient) {
   });
 }
 
-async function sendEmail(prisma: PrismaClient, env: Env, to: string, subject: string, body: string) {
+async function sendEmail(prisma: PrismaClient, env: Env, to: string, subject: string, body: string, html?: string) {
   const smtp = await prisma.smtpSettings.findFirst();
   if (!smtp) return;
 
@@ -89,7 +90,8 @@ async function sendEmail(prisma: PrismaClient, env: Env, to: string, subject: st
     from: smtp.fromName ? `${smtp.fromName} <${smtp.fromEmail}>` : smtp.fromEmail,
     to,
     subject,
-    text: body
+    text: body,
+    ...(html ? { html } : {})
   });
 }
 
@@ -169,7 +171,8 @@ export async function sendWebAppDownAlerts(
 
       if ((method === "email" || method === "both") && r.email) {
         try {
-          await sendEmail(prisma, env, r.email, subject, emailBody);
+          const html = webAppDownHtml(vars);
+          await sendEmail(prisma, env, r.email, subject, emailBody, html);
         } catch {
           // Non-fatal for scheduler
         }
@@ -218,7 +221,8 @@ export async function sendTestAlerts(
 
   if (emailAttempted) {
     try {
-      await sendEmail(prisma, env, params.email!, subject, emailBody);
+      const html = testNotificationHtml();
+      await sendEmail(prisma, env, params.email!, subject, emailBody, html);
       result.email.sent = true;
     } catch (err) {
       result.email.error = err instanceof Error ? err.message : "email-send-failed";
@@ -309,7 +313,8 @@ export async function sendServerAlertNotification(
 
       if ((method === "email" || method === "both") && r.email) {
         try {
-          await sendEmail(prisma, env, r.email, subject, emailBody);
+          const html = serverAlertHtml({ ...vars, isRepeat: params.isRepeat });
+          await sendEmail(prisma, env, r.email, subject, emailBody, html);
         } catch {
           // Non-fatal
         }
