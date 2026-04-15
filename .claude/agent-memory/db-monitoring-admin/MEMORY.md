@@ -1,0 +1,3 @@
+- [Data Retention Service](project_retention_service.md) — batch-delete retention for all 4 high-volume tables; wiring note for index.ts
+- [SQLite WAL and performance pragmas](project_sqlite_pragmas.md) — WAL mode + busy_timeout + cache_size applied in db.ts at import time
+- [Schema audit findings — April 2026](project_schema_audit.md) — missing apiKeyHash index, WebApp cascade gap, N+1 patterns, unbounded Server query

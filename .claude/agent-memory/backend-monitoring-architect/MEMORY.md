@@ -1,0 +1,1 @@
+- [Edge Monitoring API Stack](project_stack.md) — Fastify 5, ESM, TypeScript, Prisma 6, Zod; plugin pattern and auth middleware location
