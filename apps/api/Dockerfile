@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /repo
 
 # Install using the monorepo lockfile.
@@ -14,7 +14,7 @@ COPY apps/api/tsconfig.json ./apps/api/tsconfig.json
 COPY apps/api/src ./apps/api/src
 RUN npm run build -w @edge-monitoring/api
 
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /repo
 ENV NODE_ENV=production
 

@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /repo
 
 COPY package.json package-lock.json* tsconfig.base.json ./
@@ -11,7 +11,7 @@ COPY apps/agent/tsconfig.json ./apps/agent/tsconfig.json
 COPY apps/agent/src ./apps/agent/src
 RUN npm run build -w @edge-monitoring/agent
 
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /repo
 ENV NODE_ENV=production
 
