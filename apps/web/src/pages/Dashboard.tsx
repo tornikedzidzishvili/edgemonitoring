@@ -131,7 +131,6 @@ function StatCard({
   subtitle,
   icon,
   variant = "default",
-  delay = 0
 }: {
   title: string;
   value: number | null;
@@ -139,7 +138,6 @@ function StatCard({
   subtitle?: React.ReactNode;
   icon: React.ReactNode;
   variant?: "default" | "success" | "warning" | "danger";
-  delay?: number;
 }) {
   const variantStyles = {
     default: {
@@ -176,10 +174,8 @@ function StatCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ delay, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-      className={`relative overflow-hidden rounded-2xl ${styles.bg} border ${styles.border} p-5 transition-all duration-300`}
+      variants={itemVariants}
+      className={`relative overflow-hidden rounded-2xl ${styles.bg} border ${styles.border} p-5 transition-colors duration-300`}
     >
       <div className="flex items-start justify-between">
         <div className="space-y-3">
@@ -464,7 +460,10 @@ export default function Dashboard() {
       </AnimatePresence>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <motion.div
+        className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5"
+        variants={containerVariants}
+      >
         <StatCard
           title="Servers"
           value={data?.servers.total ?? null}
@@ -481,7 +480,7 @@ export default function Dashboard() {
               <circle cx="6" cy="16" r="1" fill="currentColor" />
             </svg>
           }
-          delay={0}
+
         />
 
         <StatCard
@@ -495,7 +494,7 @@ export default function Dashboard() {
               <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
             </svg>
           }
-          delay={0.05}
+
         />
 
         <StatCard
@@ -517,7 +516,7 @@ export default function Dashboard() {
             healthPct >= 95 ? "success" :
             healthPct >= 80 ? "warning" : "danger"
           }
-          delay={0.1}
+
         />
 
         <StatCard
@@ -530,7 +529,7 @@ export default function Dashboard() {
             </svg>
           }
           variant={hasFailures ? "danger" : "default"}
-          delay={0.15}
+
         />
 
         <Link to="/alerts" className="block col-span-2 sm:col-span-1">
@@ -554,10 +553,10 @@ export default function Dashboard() {
               </svg>
             }
             variant={hasAlerts ? "warning" : "default"}
-            delay={0.2}
+
           />
         </Link>
-      </div>
+      </motion.div>
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
