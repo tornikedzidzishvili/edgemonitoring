@@ -1,6 +1,9 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaLibSql } from "@prisma/adapter-libsql";
 
-export const prisma = new PrismaClient();
+const adapter = new PrismaLibSql({ url: process.env.DATABASE_URL! });
+
+export const prisma = new PrismaClient({ adapter });
 
 /**
  * SQLite performance pragmas applied once at module load time.

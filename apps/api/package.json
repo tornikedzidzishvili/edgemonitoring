@@ -16,6 +16,7 @@
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@fastify/sensible": "^6.0.3",
+    "@prisma/adapter-libsql": "^7.7.0",
     "@prisma/client": "^7.7.0",
     "@simplewebauthn/server": "^13.2.2",
     "fastify": "^5.2.1",
