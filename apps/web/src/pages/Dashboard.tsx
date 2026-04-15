@@ -74,7 +74,7 @@ function HexStatus({ status, size = "md" }: { status: "healthy" | "warning" | "c
 }
 
 // Server card with activity visualization
-function ServerCard({ server, index }: { server: { id: number; name: string; vendor: string | null; lastSeenAt: string | null }; index: number }) {
+function ServerCard({ server, index }: { server: { id: string | number; name: string; vendor: string | null; lastSeenAt: string | null }; index: number }) {
   const isActive = server.lastSeenAt && (Date.now() - new Date(server.lastSeenAt).getTime() < 5 * 60 * 1000);
 
   return (
@@ -217,6 +217,58 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   );
 }
 
+// Skeleton loading component
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6 animate-in fade-in">
+      {/* Header skeleton */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="skeleton h-6 w-6 rounded-md" />
+          <div className="space-y-2">
+            <div className="skeleton h-8 w-48 rounded-lg" />
+            <div className="skeleton h-4 w-32 rounded-md" />
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="skeleton h-9 w-28 rounded-lg" />
+          <div className="skeleton h-9 w-24 rounded-lg" />
+        </div>
+      </div>
+      {/* Stats grid skeleton */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className={`rounded-2xl border border-slate-700/30 bg-obsidian-800/30 p-5 ${i === 4 ? "col-span-2 lg:col-span-1" : ""}`}>
+            <div className="skeleton h-3 w-16 rounded mb-4" />
+            <div className="skeleton h-10 w-20 rounded-lg mb-2" />
+            <div className="skeleton h-3 w-24 rounded" />
+          </div>
+        ))}
+      </div>
+      {/* Chart + Fleet skeleton */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 rounded-2xl border border-slate-700/30 bg-obsidian-800/30 p-6">
+          <div className="skeleton h-5 w-36 rounded mb-2" />
+          <div className="skeleton h-3 w-52 rounded mb-6" />
+          <div className="skeleton h-56 sm:h-72 w-full rounded-xl" />
+        </div>
+        <div className="rounded-2xl border border-slate-700/30 bg-obsidian-800/30 p-6 space-y-4">
+          <div className="skeleton h-5 w-28 rounded" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4">
+              <div className="skeleton h-12 w-12 rounded-xl" />
+              <div className="flex-1 space-y-2">
+                <div className="skeleton h-4 w-28 rounded" />
+                <div className="skeleton h-3 w-20 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Animation variants
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -231,7 +283,7 @@ const itemVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.5, ease: [0.23, 1, 0.32, 1] }
+    transition: { duration: 0.5, ease: [0.23, 1, 0.32, 1] as [number, number, number, number] }
   }
 };
 
@@ -316,6 +368,8 @@ export default function Dashboard() {
     { value: "7d", label: "7D" },
     { value: "30d", label: "30D" }
   ];
+
+  if (loading && !data) return <DashboardSkeleton />;
 
   return (
     <motion.div
@@ -410,7 +464,7 @@ export default function Dashboard() {
       </AnimatePresence>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard
           title="Servers"
           value={data?.servers.total ?? null}
@@ -479,7 +533,7 @@ export default function Dashboard() {
           delay={0.15}
         />
 
-        <Link to="/alerts" className="block col-span-2 lg:col-span-1">
+        <Link to="/alerts" className="block col-span-2 sm:col-span-1">
           <StatCard
             title="Alerts"
             value={alertCount?.activeCount ?? null}

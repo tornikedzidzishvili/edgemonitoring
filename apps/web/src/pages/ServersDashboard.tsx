@@ -196,9 +196,25 @@ export default function ServersDashboard() {
         </div>
 
         {loading && !data ? (
-          <div className="px-6 py-12 text-center">
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-neon-cyan border-t-transparent" />
-            <p className="mt-3 text-sm text-slate-400">Loading servers...</p>
+          <div className="divide-y divide-slate-700/30">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-6 py-4">
+                <div className="skeleton h-11 w-11 rounded-xl" />
+                <div className="flex-1 space-y-2">
+                  <div className="skeleton h-4 w-32 rounded" />
+                  <div className="skeleton h-3 w-48 rounded" />
+                </div>
+                <div className="hidden sm:block space-y-2 text-right">
+                  <div className="skeleton h-4 w-16 rounded ml-auto" />
+                  <div className="skeleton h-3 w-10 rounded ml-auto" />
+                </div>
+                <div className="hidden lg:flex items-center gap-0.5">
+                  {Array.from({ length: 24 }).map((_, j) => (
+                    <div key={j} className="skeleton h-7 w-1.5 rounded-full" />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         ) : null}
 

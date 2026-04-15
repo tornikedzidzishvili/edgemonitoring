@@ -51,18 +51,11 @@ function AlertsIcon({ className }: { className?: string }) {
   );
 }
 
-function MenuIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-    </svg>
-  );
-}
 
-function CloseIcon({ className }: { className?: string }) {
+function ProfileIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
     </svg>
   );
 }
@@ -91,7 +84,7 @@ export default function Shell() {
         <div className="absolute top-1/2 -left-40 w-80 h-80 bg-neon-violet/5 rounded-full blur-3xl" />
       </div>
 
-      <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-obsidian-950/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-obsidian-950/80 backdrop-blur-xl safe-top">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 lg:py-4">
           {/* Logo */}
           <motion.div
@@ -212,40 +205,22 @@ export default function Shell() {
             </AnimatePresence>
           </motion.div>
 
-          {/* Mobile Menu Button */}
-          <motion.button
-            type="button"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white md:hidden transition-colors"
-            whileTap={{ scale: 0.95 }}
-          >
-            <AnimatePresence mode="wait" initial={false}>
-              {mobileMenuOpen ? (
-                <motion.div
-                  key="close"
-                  initial={{ rotate: -90, opacity: 0 }}
-                  animate={{ rotate: 0, opacity: 1 }}
-                  exit={{ rotate: 90, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <CloseIcon className="h-6 w-6" />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="menu"
-                  initial={{ rotate: 90, opacity: 0 }}
-                  animate={{ rotate: 0, opacity: 1 }}
-                  exit={{ rotate: -90, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <MenuIcon className="h-6 w-6" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.button>
+          {/* Mobile: User avatar + menu button */}
+          <div className="flex items-center gap-2 md:hidden">
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(!mobileMenuOpen);
+                setUserMenuOpen(false);
+              }}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-neon-cyan/20 to-neon-violet/20 text-sm font-bold text-white border border-slate-700/50 transition-all active:scale-95"
+            >
+              {user?.fullName?.charAt(0)?.toUpperCase() ?? "U"}
+            </button>
+          </div>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Mobile Slide-Down User Menu */}
         <AnimatePresence>
           {mobileMenuOpen && (
             <motion.div
@@ -255,93 +230,80 @@ export default function Shell() {
               transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
               className="overflow-hidden border-t border-slate-800/80 md:hidden"
             >
-              <motion.nav
-                className="space-y-1 bg-obsidian-900/50 px-4 py-3"
-                initial="closed"
-                animate="open"
-                variants={{
-                  open: {
-                    transition: { staggerChildren: 0.05, delayChildren: 0.1 }
-                  },
-                  closed: {
-                    transition: { staggerChildren: 0.05, staggerDirection: -1 }
-                  }
-                }}
-              >
-                {visibleNavItems.map((item) => (
-                  <motion.div
-                    key={item.to}
-                    variants={{
-                      open: { opacity: 1, x: 0 },
-                      closed: { opacity: 0, x: -20 }
-                    }}
-                  >
-                    <NavLink
-                      to={item.to}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={({ isActive }) =>
-                        [
-                          "flex items-center gap-3 rounded-xl px-4 py-3 text-base font-medium transition-all",
-                          isActive
-                            ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20"
-                            : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
-                        ].join(" ")
-                      }
-                      end={item.to === "/"}
-                    >
-                      <item.icon className="h-5 w-5" />
-                      {item.label}
-                    </NavLink>
-                  </motion.div>
-                ))}
-
-                {/* Mobile User Section */}
-                <motion.div
-                  className="mt-4 border-t border-slate-800 pt-4"
-                  variants={{
-                    open: { opacity: 1, x: 0 },
-                    closed: { opacity: 0, x: -20 }
-                  }}
-                >
-                  <div className="mb-3 flex items-center gap-3 px-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-neon-cyan/20 to-neon-violet/20 text-sm font-medium text-white border border-slate-700/50">
-                      {user?.fullName?.charAt(0)?.toUpperCase() ?? "U"}
-                    </div>
-                    <div>
-                      <div className="font-medium text-white">{user?.fullName}</div>
-                      <div className="text-sm text-slate-500">{user?.role}</div>
-                    </div>
+              <div className="bg-obsidian-900/80 backdrop-blur-xl px-4 py-4 space-y-1">
+                <div className="flex items-center gap-3 px-3 pb-3 mb-2 border-b border-slate-800/80">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-neon-cyan/20 to-neon-violet/20 text-sm font-bold text-white border border-slate-700/50">
+                    {user?.fullName?.charAt(0)?.toUpperCase() ?? "U"}
                   </div>
-                  <NavLink
-                    to="/profile"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-base font-medium text-slate-400 transition-colors hover:bg-slate-800/50 hover:text-white"
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    My Profile
-                  </NavLink>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-base font-medium text-neon-rose transition-colors hover:bg-neon-rose/10"
-                  >
-                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
-                    </svg>
-                    Logout
-                  </button>
-                </motion.div>
-              </motion.nav>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-white truncate">{user?.fullName}</div>
+                    <div className="text-xs text-slate-500 truncate">{user?.email}</div>
+                  </div>
+                </div>
+                <NavLink
+                  to="/profile"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base font-medium text-slate-300 transition-colors active:bg-slate-800/80 hover:bg-slate-800/50"
+                >
+                  <ProfileIcon className="h-5 w-5" />
+                  My Profile
+                </NavLink>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base font-medium text-neon-rose transition-colors active:bg-neon-rose/15 hover:bg-neon-rose/10"
+                >
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
+                  </svg>
+                  Logout
+                </button>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
       </header>
 
-      <main className="relative mx-auto max-w-6xl px-4 py-6 sm:py-8">
+      <main className="relative mx-auto max-w-6xl px-4 py-6 pb-24 sm:py-8 md:pb-8">
         <Outlet />
       </main>
+
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden safe-bottom">
+        <div className="border-t border-slate-800/80 bg-obsidian-950/95 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-lg items-stretch justify-around px-2">
+            {visibleNavItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === "/"}
+                className={({ isActive }) =>
+                  [
+                    "relative flex flex-1 flex-col items-center gap-1 py-3 text-[11px] font-medium transition-colors",
+                    isActive
+                      ? "text-neon-cyan"
+                      : "text-slate-500 active:text-slate-300"
+                  ].join(" ")
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && (
+                      <motion.div
+                        layoutId="bottomTabIndicator"
+                        className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 rounded-full bg-neon-cyan"
+                        transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                      />
+                    )}
+                    <item.icon className="h-5 w-5" />
+                    <span>{item.label}</span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      </nav>
     </div>
   );
 }

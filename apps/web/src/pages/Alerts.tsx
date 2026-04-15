@@ -155,7 +155,81 @@ export default function Alerts() {
             <p className="mt-1 text-xs text-slate-400">All systems operating normally</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile: Card Layout */}
+          <div className="divide-y divide-slate-700/30 md:hidden">
+            {alerts.map((alert, idx) => (
+              <motion.div
+                key={alert.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.03 }}
+                className="p-4 transition-colors active:bg-obsidian-700/30"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      to={`/servers/${alert.server.id}`}
+                      className="font-medium text-white transition-colors hover:text-neon-cyan"
+                    >
+                      {alert.server.name}
+                    </Link>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <AlertTypeBadge type={alert.type} />
+                      <StatusBadge status={alert.status} />
+                    </div>
+                  </div>
+                  {alert.status === "active" && (
+                    <button
+                      type="button"
+                      onClick={() => handleResolve(alert.id)}
+                      disabled={resolvingId === alert.id}
+                      className="shrink-0 rounded-lg bg-neon-emerald/20 px-3.5 py-2 text-xs font-medium text-neon-emerald transition-all active:bg-neon-emerald/30 disabled:opacity-50"
+                    >
+                      {resolvingId === alert.id ? "..." : "Resolve"}
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                  <div>
+                    <span className="text-slate-500">Threshold</span>
+                    <span className="ml-2 font-mono text-slate-300">
+                      {alert.thresholdValue !== null
+                        ? alert.type === "offline"
+                          ? `${alert.thresholdValue} min`
+                          : `${alert.thresholdValue}%`
+                        : "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Actual</span>
+                    <span className="ml-2 font-mono text-slate-300">
+                      {alert.actualValue !== null ? `${alert.actualValue}%` : "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Duration</span>
+                    <span className="ml-2 font-mono text-slate-300">{formatDuration(alert.duration)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Notifs</span>
+                    <span className="ml-2 font-mono text-slate-300">{alert.notificationCount}</span>
+                  </div>
+                </div>
+
+                <div className="mt-2 text-[11px] text-slate-500">
+                  {new Date(alert.triggeredAt).toLocaleString()}
+                  {alert.status === "resolved" && alert.resolvedBy && (
+                    <span className="ml-2">Resolved by {alert.resolvedBy.fullName}</span>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Desktop: Table Layout */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b border-slate-700/50 bg-obsidian-800/60 text-left text-xs font-medium uppercase tracking-wider text-slate-400">
                 <tr>
@@ -234,6 +308,7 @@ export default function Alerts() {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {totalPages > 1 && (

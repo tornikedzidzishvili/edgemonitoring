@@ -182,6 +182,32 @@
     }
   }
 
+  /* Skeleton shimmer loading */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: rgba(51, 65, 85, 0.2);
+    border-radius: 0.5rem;
+  }
+
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(51, 65, 85, 0.3) 50%,
+      transparent 100%
+    );
+    animation: skeleton-shimmer 1.8s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
   /* Gradient text */
   .gradient-text {
     background: linear-gradient(135deg, #22d3ee 0%, #34d399 50%, #a78bfa 100%);
@@ -255,6 +281,15 @@
 
   .text-glow-rose {
     text-shadow: 0 0 20px rgba(251, 113, 133, 0.5);
+  }
+
+  /* Safe area insets for notched devices */
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   /* Gradient backgrounds */
