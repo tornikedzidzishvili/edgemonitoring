@@ -106,7 +106,8 @@ export async function checkSslCertificate(domain: string, timeoutMs = 10000): Pr
           }
 
           const expiresAt = new Date(cert.valid_to);
-          const issuer = cert.issuer?.O || cert.issuer?.CN || null;
+          const rawIssuer = cert.issuer?.O || cert.issuer?.CN || null;
+          const issuer = Array.isArray(rawIssuer) ? rawIssuer[0] : rawIssuer;
           const now = new Date();
           const valid = expiresAt > now;
 

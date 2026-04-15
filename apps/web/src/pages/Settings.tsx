@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type JSX } from "react";
 import { motion } from "framer-motion";
 import UsersSettings from "../components/settings/UsersSettings";
 import SmtpSettings from "../components/settings/SmtpSettings";
