@@ -15,6 +15,6 @@
     "format": "npm run format -ws"
   },
   "engines": {
-    "node": ">=20.11"
+    "node": ">=22"
   }
 }
