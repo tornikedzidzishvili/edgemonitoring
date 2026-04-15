@@ -106,7 +106,6 @@ jobs:
           key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.PROD_SSH_PASSPHRASE }}
           command_timeout: 10m
-          script_stop: true
           envs: IMAGE_TAG,SSH_KEY_MASTER_SECRET,GHCR_TOKEN,GH_ACTOR
           script: |
             set -eu
@@ -115,7 +114,7 @@ jobs:
 
             dc() { IMAGE_TAG="$IMAGE_TAG" docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.prod.yml" "$@"; }
 
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin 2>/dev/null
 
             PREV_TAG=""
             if [ -f "$APP_DIR/.image-tag" ]; then PREV_TAG=$(cat "$APP_DIR/.image-tag"); fi
