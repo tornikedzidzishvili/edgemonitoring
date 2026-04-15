@@ -25,6 +25,8 @@ model Server {
   metricMinutes ServerMetricMinute[]
   alertConfig  ServerAlertConfig?
   alerts       ServerAlert[]
+
+  @@index([apiKeyHash])
 }
 
 model ServerMetricMinute {
@@ -69,7 +71,7 @@ model WebApp {
 model UptimeCheckResult {
   id             String   @id @default(cuid())
   webAppId       String
-  webApp         WebApp   @relation(fields: [webAppId], references: [id])
+  webApp         WebApp   @relation(fields: [webAppId], references: [id], onDelete: Cascade)
   checkedAt      DateTime @default(now())
   ok             Boolean
   httpStatus     Int?
@@ -77,12 +79,13 @@ model UptimeCheckResult {
   error          String?
 
   @@index([webAppId, checkedAt])
+  @@index([ok, checkedAt])
 }
 
 model ServerReport {
   id         String   @id @default(cuid())
   serverId   String
-  server     Server   @relation(fields: [serverId], references: [id])
+  server     Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
   reportedAt DateTime @default(now())
   payload    Json
 
@@ -123,7 +126,6 @@ model Passkey {
   lastUsedAt        DateTime?
 
   @@index([userId])
-  @@index([credentialId])
 }
 
 model Session {
@@ -139,15 +141,17 @@ model Session {
 }
 
 model SmtpSettings {
-  id        String   @id @default(cuid())
-  host      String
-  port      Int
-  secure    Boolean  @default(true)
-  username  String?
-  password  String?  // encrypted
-  fromEmail String
-  fromName  String?
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  host        String
+  port        Int
+  secure      Boolean  @default(true)
+  username    String?
+  passwordEnc String?
+  passwordIv  String?
+  passwordTag String?
+  fromEmail   String
+  fromName    String?
+  updatedAt   DateTime @updatedAt
 }
 
 model SmsSettings {

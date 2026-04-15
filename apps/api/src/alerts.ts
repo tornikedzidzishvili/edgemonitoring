@@ -57,7 +57,7 @@ async function getOrCreateAlertTemplate(prisma: PrismaClient) {
   });
 }
 
-async function sendEmail(prisma: PrismaClient, to: string, subject: string, body: string) {
+async function sendEmail(prisma: PrismaClient, env: Env, to: string, subject: string, body: string) {
   const smtp = await prisma.smtpSettings.findFirst();
   if (!smtp) return;
 
@@ -74,10 +74,13 @@ async function sendEmail(prisma: PrismaClient, to: string, subject: string, body
     secure: implicitTls,
     requireTLS: useTls && !implicitTls,
     auth:
-      smtp.username && smtp.password
+      smtp.username && smtp.passwordEnc && smtp.passwordIv && smtp.passwordTag
         ? {
             user: smtp.username,
-            pass: smtp.password
+            pass: decryptString(
+              { enc: smtp.passwordEnc, iv: smtp.passwordIv, tag: smtp.passwordTag },
+              env.SSH_KEY_MASTER_SECRET
+            )
           }
         : undefined
   });
@@ -166,7 +169,7 @@ export async function sendWebAppDownAlerts(
 
       if ((method === "email" || method === "both") && r.email) {
         try {
-          await sendEmail(prisma, r.email, subject, emailBody);
+          await sendEmail(prisma, env, r.email, subject, emailBody);
         } catch {
           // Non-fatal for scheduler
         }
@@ -215,7 +218,7 @@ export async function sendTestAlerts(
 
   if (emailAttempted) {
     try {
-      await sendEmail(prisma, params.email!, subject, emailBody);
+      await sendEmail(prisma, env, params.email!, subject, emailBody);
       result.email.sent = true;
     } catch (err) {
       result.email.error = err instanceof Error ? err.message : "email-send-failed";
@@ -306,7 +309,7 @@ export async function sendServerAlertNotification(
 
       if ((method === "email" || method === "both") && r.email) {
         try {
-          await sendEmail(prisma, r.email, subject, emailBody);
+          await sendEmail(prisma, env, r.email, subject, emailBody);
         } catch {
           // Non-fatal
         }

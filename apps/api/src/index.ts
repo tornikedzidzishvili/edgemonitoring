@@ -20,12 +20,19 @@ import { sharedHostingServerRoutes } from "./routes/sharedHostingServers.js";
 import { cleanExpiredSessions } from "./services/userAuth.js";
 import { startServerAlertScheduler } from "./serverAlertScheduler.js";
 import { seedDevAdmin } from "./seed.js";
+import { startDataRetention } from "./dataRetention.js";
+import { routeGuardPlugin } from "./plugins/routeGuard.js";
+import { rateLimiterPlugin } from "./plugins/rateLimiter.js";
 
 const env = getEnv();
 const app = Fastify({ logger: true });
 
 await app.register(cors, { origin: true });
 await app.register(sensible);
+
+// Security plugins — rate limiter first so 429 fires before auth check
+await app.register(rateLimiterPlugin);
+await app.register(routeGuardPlugin);
 
 // Register auth and settings routes
 await app.register(authRoutes);
@@ -41,15 +48,8 @@ setInterval(() => {
   cleanExpiredSessions().catch(() => {});
 }, 60 * 60 * 1000);
 
-// Cleanup server metrics history (keep last 30 days)
-setInterval(() => {
-  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  prisma.serverMetricMinute
-    .deleteMany({ where: { minuteStart: { lt: cutoff } } })
-    .catch(() => {
-      // ignore
-    });
-}, 6 * 60 * 60 * 1000);
+// Data retention: 30-day cleanup for all high-volume tables (batched deletes)
+startDataRetention(prisma, app.log);
 
 app.get("/health", async () => ({ ok: true }));
 
@@ -83,17 +83,15 @@ app.get("/servers/dashboard", async (req) => {
   const since12h = new Date(now - 12 * 60 * 60 * 1000);
   const bucketMs = 30 * 60 * 1000; // 30-minute buckets for 12 hours = 24 buckets
 
-  const [totalCount, servers] = await Promise.all([
+  const [totalCount, activeCount, servers] = await Promise.all([
     prisma.server.count(),
+    prisma.server.count({ where: { lastSeenAt: { gte: activeThreshold } } }),
     prisma.server.findMany({
       orderBy: { createdAt: "desc" },
       skip: (query.page - 1) * query.limit,
       take: query.limit
     })
   ]);
-
-  const allServers = await prisma.server.findMany({ select: { lastSeenAt: true } });
-  const activeCount = allServers.filter((s) => s.lastSeenAt && s.lastSeenAt >= activeThreshold).length;
 
   const serverIds = servers.map((s) => s.id);
   const reports = await prisma.serverReport.findMany({

@@ -26,7 +26,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         secure: settings.secure,
         username: settings.username,
         // Don't expose password
-        hasPassword: !!settings.password,
+        hasPassword: !!settings.passwordEnc,
         fromEmail: settings.fromEmail,
         fromName: settings.fromName,
         updatedAt: settings.updatedAt
@@ -50,28 +50,36 @@ export async function settingsRoutes(app: FastifyInstance) {
 
     const existing = await prisma.smtpSettings.findFirst();
 
-    const data = {
+    const pwEnc = body.password ? encryptString(body.password, env.SSH_KEY_MASTER_SECRET) : null;
+
+    const data: Record<string, unknown> = {
       host: body.host,
       port: body.port,
       secure: body.secure,
       username: body.username ?? null,
-      password: body.password ?? null,
       fromEmail: body.fromEmail,
-      fromName: body.fromName ?? null
+      fromName: body.fromName ?? null,
+      ...(pwEnc
+        ? { passwordEnc: pwEnc.enc, passwordIv: pwEnc.iv, passwordTag: pwEnc.tag }
+        : body.password === null
+          ? { passwordEnc: null, passwordIv: null, passwordTag: null }
+          : {})
     };
 
     let settings;
     if (existing) {
-      // If password is not provided, keep the existing one
+      // If password is not provided (undefined), keep the existing one
       if (body.password === undefined) {
-        delete (data as any).password;
+        delete data.passwordEnc;
+        delete data.passwordIv;
+        delete data.passwordTag;
       }
       settings = await prisma.smtpSettings.update({
         where: { id: existing.id },
         data
       });
     } else {
-      settings = await prisma.smtpSettings.create({ data });
+      settings = await prisma.smtpSettings.create({ data: data as any });
     }
 
     return {
@@ -81,7 +89,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         port: settings.port,
         secure: settings.secure,
         username: settings.username,
-        hasPassword: !!settings.password,
+        hasPassword: !!settings.passwordEnc,
         fromEmail: settings.fromEmail,
         fromName: settings.fromName,
         updatedAt: settings.updatedAt
