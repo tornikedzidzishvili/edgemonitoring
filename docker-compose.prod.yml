@@ -1,8 +1,6 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: ./apps/api/Dockerfile
+    image: ghcr.io/tornikedzidzishvili/edge-monitoring-api:${IMAGE_TAG:-latest}
     environment:
       - PORT=4000
       - DATABASE_URL=file:/data/edge-monitoring.db
@@ -23,12 +21,7 @@ services:
       start_period: 10s
 
   web:
-    build:
-      context: .
-      dockerfile: ./apps/web/Dockerfile
-      args:
-        # Use same-origin API via reverse proxy
-        VITE_API_BASE_URL: /api
+    image: ghcr.io/tornikedzidzishvili/edge-monitoring-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       api:
