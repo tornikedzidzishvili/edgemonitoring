@@ -8,7 +8,7 @@
  * Retention windows:
  *   UptimeCheckResult   30 days  (checkedAt)
  *   DomainCheckResult   30 days  (checkedAt)
- *   ServerReport        30 days  (reportedAt)
+ *   ServerReport         7 days  (reportedAt)  ← shortened by user decision
  *   ServerMetricMinute  30 days  (minuteStart)
  *   ServerAlert         90 days  (resolvedAt, resolved records only)
  *
@@ -20,6 +20,7 @@ import { PrismaClient } from "@prisma/client";
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const BATCH_SIZE = 1_000;
+const RETENTION_7_DAYS_MS = 7 * 24 * 60 * 60 * 1_000;
 const RETENTION_30_DAYS_MS = 30 * 24 * 60 * 60 * 1_000;
 const RETENTION_90_DAYS_MS = 90 * 24 * 60 * 60 * 1_000;
 const INTERVAL_MS = 6 * 60 * 60 * 1_000; // 6 hours
@@ -30,6 +31,38 @@ interface RetentionLogger {
   info(msg: string, data?: Record<string, unknown>): void;
   error(msg: string, data?: Record<string, unknown>): void;
 }
+
+// ─── Observability types ─────────────────────────────────────────────────────
+
+export interface RetentionRunSummary {
+  /** ISO timestamp when the run completed. */
+  completedAt: string;
+  /** Wall-clock duration of the entire run in milliseconds. */
+  durationMs: number;
+  /** Rows deleted per table. -1 indicates the table's cleanup failed. */
+  deleted: {
+    uptimeCheckResult: number;
+    domainCheckResult: number;
+    serverReport: number;
+    serverMetricMinute: number;
+    serverAlert: number;
+  };
+  /** Result of the WAL checkpoint performed at the end of the run. */
+  checkpoint: {
+    ok: boolean;
+    busy: number | null;
+    log: number | null;
+    checkpointed: number | null;
+  };
+}
+
+/**
+ * Last completed retention run summary.
+ * Updated at the end of every successful (or partially-failed) run.
+ * null until the first run completes.
+ * Exported so the backend /admin/db/health route can surface it.
+ */
+export let lastRetentionRun: RetentionRunSummary | null = null;
 
 // ─── Batch-delete helpers ────────────────────────────────────────────────────
 
@@ -186,19 +219,29 @@ async function runRetention(
   logger: RetentionLogger
 ): Promise<void> {
   const now = Date.now();
+  const cutoff7 = new Date(now - RETENTION_7_DAYS_MS);
   const cutoff30 = new Date(now - RETENTION_30_DAYS_MS);
   const cutoff90 = new Date(now - RETENTION_90_DAYS_MS);
 
   logger.info("data-retention: starting cleanup run", {
-    cutoff30: cutoff30.toISOString(),
-    cutoff90: cutoff90.toISOString(),
+    cutoff7days: cutoff7.toISOString(),
+    cutoff30days: cutoff30.toISOString(),
+    cutoff90days: cutoff90.toISOString(),
   });
 
   // Run tables sequentially — SQLite only supports one writer at a time.
   // Running in parallel would cause SQLITE_BUSY contention.
+
+  // Track per-table deleted counts; -1 signals a failure for that table.
+  let uptimeDeleted = -1;
+  let domainDeleted = -1;
+  let reportDeleted = -1;
+  let metricDeleted = -1;
+  let alertDeleted = -1;
+
   try {
-    const uptimeDeleted = await batchDeleteUptimeCheckResults(prisma, cutoff30);
-    logger.info("data-retention: UptimeCheckResult", {
+    uptimeDeleted = await batchDeleteUptimeCheckResults(prisma, cutoff30);
+    logger.info("data-retention: UptimeCheckResult (30d)", {
       deleted: uptimeDeleted,
     });
   } catch (err) {
@@ -208,8 +251,8 @@ async function runRetention(
   }
 
   try {
-    const domainDeleted = await batchDeleteDomainCheckResults(prisma, cutoff30);
-    logger.info("data-retention: DomainCheckResult", {
+    domainDeleted = await batchDeleteDomainCheckResults(prisma, cutoff30);
+    logger.info("data-retention: DomainCheckResult (30d)", {
       deleted: domainDeleted,
     });
   } catch (err) {
@@ -219,8 +262,11 @@ async function runRetention(
   }
 
   try {
-    const reportDeleted = await batchDeleteServerReports(prisma, cutoff30);
-    logger.info("data-retention: ServerReport", { deleted: reportDeleted });
+    // ServerReport uses a 7-day window (shortened per user decision).
+    reportDeleted = await batchDeleteServerReports(prisma, cutoff7);
+    logger.info("data-retention: ServerReport (7d)", {
+      deleted: reportDeleted,
+    });
   } catch (err) {
     logger.error("data-retention: failed to clean ServerReport", {
       error: String(err),
@@ -228,11 +274,8 @@ async function runRetention(
   }
 
   try {
-    const metricDeleted = await batchDeleteServerMetricMinutes(
-      prisma,
-      cutoff30
-    );
-    logger.info("data-retention: ServerMetricMinute", {
+    metricDeleted = await batchDeleteServerMetricMinutes(prisma, cutoff30);
+    logger.info("data-retention: ServerMetricMinute (30d)", {
       deleted: metricDeleted,
     });
   } catch (err) {
@@ -242,7 +285,7 @@ async function runRetention(
   }
 
   try {
-    const alertDeleted = await batchDeleteResolvedAlerts(prisma, cutoff90);
+    alertDeleted = await batchDeleteResolvedAlerts(prisma, cutoff90);
     logger.info("data-retention: ServerAlert (resolved, 90d)", {
       deleted: alertDeleted,
     });
@@ -252,9 +295,74 @@ async function runRetention(
     });
   }
 
-  logger.info("data-retention: cleanup run complete", {
-    durationMs: Date.now() - now,
-  });
+  // ── Incremental vacuum (reclaim free pages in small batches) ─────────────
+  // Runs 500 pages per invocation to stay under the write-lock budget.
+  // Only effective when auto_vacuum = INCREMENTAL is set (see db.ts).
+  try {
+    await prisma.$executeRawUnsafe("PRAGMA incremental_vacuum(500);");
+    await prisma.$executeRawUnsafe("PRAGMA optimize;");
+    logger.info("data-retention: incremental_vacuum + optimize complete");
+  } catch (err) {
+    logger.error("data-retention: incremental_vacuum/optimize failed", {
+      error: String(err),
+    });
+  }
+
+  // ── WAL checkpoint ────────────────────────────────────────────────────────
+  // TRUNCATE mode resets the WAL file to zero length after checkpointing,
+  // reclaiming disk space immediately.  We log the three counters SQLite
+  // returns so ops can verify the checkpoint was not blocked.
+  let checkpointOk = false;
+  let checkpointBusy: number | null = null;
+  let checkpointLog: number | null = null;
+  let checkpointCheckpointed: number | null = null;
+
+  try {
+    // Returns a single row: { busy, log, checkpointed }
+    const rows = await prisma.$queryRawUnsafe<
+      { busy: number; log: number; checkpointed: number }[]
+    >("PRAGMA wal_checkpoint(TRUNCATE);");
+
+    if (rows.length > 0) {
+      checkpointBusy = rows[0].busy;
+      checkpointLog = rows[0].log;
+      checkpointCheckpointed = rows[0].checkpointed;
+    }
+    checkpointOk = true;
+
+    logger.info("data-retention: WAL checkpoint complete", {
+      busy: checkpointBusy,
+      log: checkpointLog,
+      checkpointed: checkpointCheckpointed,
+    });
+  } catch (err) {
+    logger.error("data-retention: WAL checkpoint failed", {
+      error: String(err),
+    });
+  }
+
+  const durationMs = Date.now() - now;
+
+  logger.info("data-retention: cleanup run complete", { durationMs });
+
+  // ── Update module-level summary (read by /admin/db/health) ───────────────
+  lastRetentionRun = {
+    completedAt: new Date().toISOString(),
+    durationMs,
+    deleted: {
+      uptimeCheckResult: uptimeDeleted,
+      domainCheckResult: domainDeleted,
+      serverReport: reportDeleted,
+      serverMetricMinute: metricDeleted,
+      serverAlert: alertDeleted,
+    },
+    checkpoint: {
+      ok: checkpointOk,
+      busy: checkpointBusy,
+      log: checkpointLog,
+      checkpointed: checkpointCheckpointed,
+    },
+  };
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────

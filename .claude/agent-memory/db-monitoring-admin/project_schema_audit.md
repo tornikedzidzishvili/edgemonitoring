@@ -1,35 +1,47 @@
 ---
 name: Schema audit findings — April 2026
-description: Known schema weaknesses and N+1 patterns found during the April 2026 audit
+description: Comprehensive schema, retention, index, and write-path audit — updated with storage-hardening findings 2026-04-21
 type: project
 ---
 
-Key findings from full schema + query audit (2026-04-15):
+## Previous findings (2026-04-15)
 
-**Critical — missing indexes:**
-- `Server.apiKeyHash` has no index; every agent report does a full table scan via `findFirst({ where: { apiKeyHash } })`.
-- `UptimeCheckResult.ok` has no index; the `/failures` and `/dashboard` `recentFailures` queries filter on `ok: false` cross the entire table.
+- `Server.apiKeyHash` was missing an index — fixed in migration 20260415165243.
+- `UptimeCheckResult.ok` index added in same migration.
+- `WebApp → UptimeCheckResult` cascade confirmed via migration.
+- N+1 patterns: GET /webapps, GET /shared-hosting/:id, GET /servers/:id/endpoints — bounded by small entity counts, acceptable.
+- Unbounded `GET /servers/dashboard` count query — known issue.
+- `batchDeleteResolvedAlerts` skips resolved alerts with NULL `resolvedAt`.
 
-**Critical — missing cascade delete on WebApp → UptimeCheckResult:**
-- Schema FK is `onDelete: Restrict` (implicit default). Deleting a WebApp via DELETE /admin/webapps/:id will error at the DB level unless UptimeCheckResults are deleted first. The server-delete path works around it manually; the webapp-delete path does not.
+## Storage-hardening audit findings (2026-04-21)
 
-**Warning — N+1 patterns in index.ts:**
-- GET /webapps: `Promise.all(webapps.map(...))` fires 5 queries per webapp (lastCheck + 4 counts).
-- GET /shared-hosting/:id: fires 3 queries per domain (lastCheck + 2 counts).
-- GET /servers/:id/endpoints: fires 4 queries per endpoint.
-- GET /dashboard: fires 1 query per webapp for lastCheck.
-- All are bounded by the number of webapps/domains, which is expected to remain small.
+**ServerMetricMinute redundant index**: both `@@unique([serverId, minuteStart])` AND `@@index([serverId, minuteStart])` exist — the unique constraint already creates a B-tree index; the explicit `@@index` is a duplicate waste of write overhead and storage.
 
-**Warning — unbounded query on Server:**
-- `GET /servers/dashboard` line 94: fetches ALL servers with `findMany({ select: { lastSeenAt: true } })` to count actives, separate from the paginated query above it. Should be replaced with a `count({ where: { lastSeenAt: { gte: threshold } } })`.
+**No auto_vacuum**: SQLite never releases freed pages to OS. Even when retention succeeds, file size never shrinks. Need `PRAGMA auto_vacuum = INCREMENTAL` + one-time `VACUUM` on prod DB, then `PRAGMA incremental_vacuum(N)` after each retention run.
 
-**Warning — batchDeleteResolvedAlerts uses resolvedAt but resolvedAt is nullable:**
-- Alerts that are `status="resolved"` but have a NULL `resolvedAt` are never cleaned up. The alert scheduler should always set resolvedAt when resolving.
+**ServerReport is the 2M-row culprit**: ingested every ~30s per server (agents report at ~30s cadence, rate limit allows up to 120/min per IP). Stores full JSON payload (~several KB per row).
 
-**Info — ServerReport and ServerMetricMinute lack onDelete: Cascade in original init migration (now fixed by later migrations).**
-- Confirmed CASCADE is present for both in the current schema.
+**ServerReport payload consumers — exhaustive list:**
+- `GET /servers` (list): reads only `serverId, reportedAt` scoped to last 12h — no payload needed
+- `GET /servers/:id`: `findFirst` latest only — displays current snapshot
+- `GET /servers/:id/stream` (SSE): polls every 2s for latest only — real-time dashboard
+- `GET /webapps/:id`: `findFirst` latest only — host metrics panel
+- `DELETE /servers/:id`: cascades all reports (correct behavior)
+- **No consumer reads ServerReport rows older than 12 hours.** The 12h presence-bucket query is the widest look-back.
 
-**Migration history is clean** — 15 migrations, sequential timestamps, no gaps, latest matches current schema.
+**Retention index mismatch**: batch-delete helpers filter by time column alone (`checkedAt < cutoff`, `reportedAt < cutoff`), but all indexes are composite `(parentId, timeCol)`. SQLite will scan the composite index with only the time predicate, which is suboptimal. Single-column time indexes on each retention column would make cleanup faster.
 
-**Why:** Recorded to avoid re-auditing known issues in future sessions.
-**How to apply:** Prioritize apiKeyHash index and WebApp cascade fix before next deploy.
+**No incremental_vacuum after retention**: pages freed by retention pass are never released to OS, so file grows forever.
+
+**No PRAGMA optimize**: query planner statistics drift over time.
+
+**No WAL checkpoint management**: WAL can grow unbounded without `PRAGMA wal_checkpoint(TRUNCATE)` and `PRAGMA journal_size_limit`.
+
+**Rate limiter for /agents/report**: 120 req/min per IP. Normal cadence is ~2/min. Flood risk is bounded per IP, but N servers behind NAT share the same bucket — could starve legitimate agents. Key concern: rate limiter is IP-keyed, not agent-key-keyed.
+
+**ServerAlert active-alert growth risk**: `resolvedAt` is only set on manual resolution. No auto-resolution or timeout mechanism. Active alerts accumulate indefinitely and are never touched by retention.
+
+**WebApp.serverId FK has no onDelete behavior defined**: deleting a Server leaves WebApp rows with a stale serverId reference (not a cascade gap — serverId is nullable, so the FK is effectively optional, but orphaned rows linger).
+
+**Why:** Storage-hardening request after prod DB hit >2M rows and became inoperable.
+**How to apply:** Use this list as the canonical issue tracker when drafting migrations and code changes in future sessions.

@@ -30,6 +30,10 @@ void prisma
   .then(() => prisma.$executeRawUnsafe("PRAGMA synchronous = NORMAL;"))
   .then(() => prisma.$executeRawUnsafe("PRAGMA busy_timeout = 5000;"))
   .then(() => prisma.$executeRawUnsafe("PRAGMA cache_size = -20000;"))
+  .then(() => prisma.$executeRawUnsafe("PRAGMA auto_vacuum = INCREMENTAL;"))
+  .then(() => prisma.$executeRawUnsafe("PRAGMA journal_size_limit = 67108864;"))
+  .then(() => prisma.$executeRawUnsafe("PRAGMA temp_store = MEMORY;"))
+  .then(() => prisma.$executeRawUnsafe("PRAGMA optimize;"))
   .catch((err: unknown) => {
     // Non-fatal — the server can still operate without these optimisations,
     // but log loudly so the issue is visible.

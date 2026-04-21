@@ -17,6 +17,7 @@ import { serverAlertsRoutes } from "./routes/serverAlerts.js";
 import { profileRoutes } from "./routes/profile.js";
 import { passkeyRoutes } from "./routes/passkeys.js";
 import { sharedHostingServerRoutes } from "./routes/sharedHostingServers.js";
+import { adminDbHealthRoutes } from "./routes/adminDbHealth.js";
 import { cleanExpiredSessions } from "./services/userAuth.js";
 import { startServerAlertScheduler } from "./serverAlertScheduler.js";
 import { seedDevAdmin } from "./seed.js";
@@ -42,6 +43,7 @@ await app.register(serverAlertsRoutes);
 await app.register(profileRoutes);
 await app.register(passkeyRoutes);
 await app.register(sharedHostingServerRoutes);
+await app.register(adminDbHealthRoutes);
 
 // Clean expired sessions periodically (every hour)
 setInterval(() => {

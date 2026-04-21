@@ -6,14 +6,20 @@ type: project
 
 `apps/api/src/dataRetention.ts` implements rolling retention for all high-volume tables.
 
-Retention windows:
+Retention windows (as of 2026-04-21):
 - UptimeCheckResult  — 30 days on `checkedAt`
 - DomainCheckResult  — 30 days on `checkedAt`
-- ServerReport       — 30 days on `reportedAt`
+- ServerReport       —  7 days on `reportedAt`  ← shortened from 30d, user-approved
 - ServerMetricMinute — 30 days on `minuteStart`
 - ServerAlert        — 90 days on `resolvedAt`, status="resolved" only
 
 Strategy: fetch-IDs-then-delete loop in batches of 1 000. Tables run sequentially (not in parallel) to avoid SQLITE_BUSY under WAL mode.
+
+Post-cleanup operations (appended after all table try/catches in `runRetention`):
+1. `PRAGMA incremental_vacuum(500)` + `PRAGMA optimize` — reclaims free pages in small batches.
+2. `PRAGMA wal_checkpoint(TRUNCATE)` — resets WAL to zero length; logs busy/log/checkpointed counters.
+
+Observability: exports `lastRetentionRun: RetentionRunSummary | null` and the `RetentionRunSummary` type. Backend reads this from `/admin/db/health` (route owned by backend agent).
 
 Public API: `startDataRetention(prisma, logger)` — fires immediately on call, then every 6 hours via `setInterval().unref()`.
 
