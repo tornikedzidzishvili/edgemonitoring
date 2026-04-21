@@ -13,8 +13,21 @@
  *
  * Import from sessionAuth, NOT from auth.ts (which uses the legacy x-admin-key
  * header and is not suitable for user-session-based access control).
+ *
+ * IMPORTANT — fastify-plugin (fp) wrapping is REQUIRED here.
+ *
+ * Without fp(), Fastify treats this as an encapsulated plugin: the addHook
+ * call registers the onRequest hook only on the child context created for
+ * this plugin, not on the root app instance. Route plugins registered as
+ * siblings on the root app (e.g. adminDbHealthRoutes, usersRoutes, etc.)
+ * live in their own child contexts and the guard hook never fires for them.
+ *
+ * fp() breaks encapsulation so the hook attaches to the root Fastify instance
+ * and is inherited by every route registered anywhere in the application.
+ * This is the canonical Fastify pattern for cross-cutting hooks.
  */
 
+import fp from "fastify-plugin";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireAuth, requireAdmin } from "../middleware/sessionAuth.js";
 
@@ -108,7 +121,7 @@ function stripQuery(url: string): string {
 // Plugin
 // ---------------------------------------------------------------------------
 
-export async function routeGuardPlugin(app: FastifyInstance): Promise<void> {
+async function routeGuardPluginImpl(app: FastifyInstance): Promise<void> {
   app.addHook(
     "onRequest",
     async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
@@ -146,3 +159,12 @@ export async function routeGuardPlugin(app: FastifyInstance): Promise<void> {
     }
   );
 }
+
+// fp() wrapping is what makes the onRequest hook attach to the root Fastify
+// instance rather than an encapsulated child context. Without this, sibling
+// route plugins (adminDbHealthRoutes, usersRoutes, etc.) would bypass the guard
+// entirely because their routes live in separate child contexts.
+export const routeGuardPlugin = fp(routeGuardPluginImpl, {
+  name: "routeGuard",
+  fastify: "5.x",
+});

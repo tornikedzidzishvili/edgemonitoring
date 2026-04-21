@@ -25,6 +25,7 @@
  */
 
 import { createHash } from "node:crypto";
+import fp from "fastify-plugin";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 // ---------------------------------------------------------------------------
@@ -157,7 +158,7 @@ function pruneExpiredBuckets(): void {
 // Plugin
 // ---------------------------------------------------------------------------
 
-export async function rateLimiterPlugin(app: FastifyInstance): Promise<void> {
+async function rateLimiterPluginImpl(app: FastifyInstance): Promise<void> {
   // Schedule periodic cleanup. The interval reference is intentionally not
   // stored because it should run for the lifetime of the process.
   const cleanupInterval = setInterval(pruneExpiredBuckets, WINDOW_MS);
@@ -205,3 +206,11 @@ export async function rateLimiterPlugin(app: FastifyInstance): Promise<void> {
     }
   );
 }
+
+// fp() is required so the onRequest hook attaches to the root Fastify instance.
+// Without it the hook is scoped to an encapsulated child context and rate
+// limiting does not apply to sibling route plugins.
+export const rateLimiterPlugin = fp(rateLimiterPluginImpl, {
+  name: "rateLimiter",
+  fastify: "5.x",
+});
