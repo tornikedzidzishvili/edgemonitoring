@@ -128,7 +128,11 @@ function parseAgentSnapshot(payload: unknown): {
   const docker = p?.docker;
   const cpuLoad = typeof system?.cpu?.load === "number" ? system.cpu.load : undefined;
   const memTotal = typeof system?.mem?.total === "number" ? system.mem.total : undefined;
-  const memUsed = typeof system?.mem?.used === "number" ? system.mem.used : undefined;
+  // Agent's system.mem.used actually represents available (free-ish) bytes; invert to true used.
+  // Same convention is applied in serverAlertScheduler.ts (see commit d965bc3).
+  const rawMemUsed = typeof system?.mem?.used === "number" ? system.mem.used : undefined;
+  const memUsed =
+    typeof rawMemUsed === "number" && typeof memTotal === "number" ? Math.max(0, memTotal - rawMemUsed) : undefined;
   const disk = Array.isArray(system?.disk)
     ? system.disk.map((d: any) => ({
         fs: d?.fs,
@@ -367,7 +371,10 @@ export default function ServerDetailPage() {
   }, [latestSnap?.containerStats]);
 
   const cpuSeries = useMemo(() => metrics.map((p) => ({ t: p.t, cpu: p.cpuLoad })), [metrics]);
-  const memSeries = useMemo(() => metrics.map((p) => ({ t: p.t, mem: p.memUsedPct })), [metrics]);
+  const memSeries = useMemo(
+    () => metrics.map((p) => ({ t: p.t, mem: typeof p.memUsedPct === "number" ? 100 - p.memUsedPct : p.memUsedPct })),
+    [metrics]
+  );
 
   const isActive = detail?.lastSeenAt ? Date.now() - new Date(detail.lastSeenAt).getTime() < 5 * 60 * 1000 : false;
   const uptimeMs = detail?.createdAt ? Date.now() - new Date(detail.createdAt).getTime() : 0;
