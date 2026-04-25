@@ -3,6 +3,10 @@ WORKDIR /repo
 
 COPY package.json package-lock.json* tsconfig.base.json ./
 COPY apps/api/package.json ./apps/api/package.json
+# Prisma schema is required during npm ci because the api workspace's
+# postinstall hook runs `prisma generate` against the monorepo lockfile.
+# Without it, npm ci fails with "schema.prisma: file not found".
+COPY apps/api/prisma ./apps/api/prisma
 COPY apps/web/package.json ./apps/web/package.json
 COPY apps/agent/package.json ./apps/agent/package.json
 RUN npm ci
