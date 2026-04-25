@@ -10,6 +10,7 @@ import { startUptimeScheduler, startDomainScheduler } from "./scheduler.js";
 import { getSslStatus } from "./domainChecker.js";
 import { probeOverSsh } from "./sshProbe.js";
 import { decryptString, encryptString } from "./cryptoBox.js";
+import { installAgentOverSsh } from "./agentInstaller.js";
 import { authRoutes } from "./routes/auth.js";
 import { usersRoutes } from "./routes/users.js";
 import { settingsRoutes } from "./routes/settings.js";
@@ -1072,6 +1073,106 @@ app.post("/admin/servers/:id/probe", async (req) => {
   });
 
   return { serverId: server.id, serverName: server.name, ...result };
+});
+
+// Admin: install agent on a server via SSH
+//
+// Route classification: POST /admin/servers/:id/install-agent
+// The "/admin/*" prefix is classified as an admin route by routeGuard.ts
+// (see isAdminRoute()), which calls requireAdmin() — valid session + role
+// === "admin". No additional classification or preHandler is needed here.
+//
+// Response: streaming NDJSON (Content-Type: application/x-ndjson).
+// Pre-flight errors (missing IP, no SSH key, etc.) are returned as a normal
+// JSON response with a 4xx status code BEFORE streaming begins.
+app.post("/admin/servers/:id/install-agent", async (req, reply) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+
+  // --- 1. Look up server ---
+  const server = await prisma.server.findUnique({
+    where: { id: params.id },
+    include: { sshKey: true }
+  });
+  if (!server) throw app.httpErrors.notFound("server-not-found");
+
+  // --- 2. Pre-flight checks — return 400 before any streaming ---
+  if (!server.ip) {
+    throw app.httpErrors.badRequest("missing-server-ip");
+  }
+  if (!server.sshKeyId || !server.sshKey) {
+    throw app.httpErrors.badRequest("missing-ssh-key");
+  }
+
+  const sshKey = server.sshKey;
+
+  // Resolve SSH username: prefer server-level override, fall back to key default
+  const username = server.sshUser ?? sshKey.username ?? null;
+  if (!username) {
+    throw app.httpErrors.badRequest("missing-ssh-username");
+  }
+
+  const port = server.sshPort ?? sshKey.port ?? 22;
+
+  // --- 3. Decrypt private key + passphrase ---
+  const privateKey = decryptString(
+    { enc: sshKey.privateKeyEnc, iv: sshKey.privateKeyIv, tag: sshKey.privateKeyTag },
+    env.SSH_KEY_MASTER_SECRET
+  );
+
+  let passphrase: string | undefined;
+  if (sshKey.passphraseEnc && sshKey.passphraseIv && sshKey.passphraseTag) {
+    passphrase = decryptString(
+      { enc: sshKey.passphraseEnc, iv: sshKey.passphraseIv, tag: sshKey.passphraseTag },
+      env.SSH_KEY_MASTER_SECRET
+    );
+  }
+
+  // --- 4. Start NDJSON stream ---
+  // From this point on, all errors are emitted as NDJSON lines — we cannot
+  // send a different HTTP status code after headers have been sent.
+  reply.raw.setHeader("Content-Type", "application/x-ndjson");
+  reply.raw.setHeader("Transfer-Encoding", "chunked");
+  reply.raw.setHeader("Cache-Control", "no-cache");
+  reply.raw.writeHead(200);
+
+  function emit(jsonLine: string): void {
+    reply.raw.write(jsonLine + "\n");
+  }
+
+  emit(JSON.stringify({ type: "status", phase: "connecting", message: `Preparing to connect to ${server.ip}:${port}` }));
+
+  // --- 5. Rotate API key (emit before DB write so the stream is sequential) ---
+  emit(JSON.stringify({
+    type: "status",
+    phase: "rotating-key",
+    message: "Generating new agent API key — any previously installed agent will need to be reinstalled to use the new key"
+  }));
+
+  const plainApiKey = generateApiKey();
+  const newApiKeyHash = hashApiKey(plainApiKey);
+
+  await prisma.server.update({
+    where: { id: server.id },
+    data: { apiKeyHash: newApiKeyHash }
+  });
+
+  // --- 6 + 7 + 8 + 9 + 10 + 11 + 12. SSH install (all phases handled inside) ---
+  await installAgentOverSsh(
+    {
+      host: server.ip,
+      port,
+      username,
+      privateKey,
+      passphrase,
+      apiUrl: env.PUBLIC_API_URL,
+      apiKey: plainApiKey,
+      serverName: server.name,
+      timeoutMs: 5 * 60 * 1000
+    },
+    emit
+  );
+
+  reply.raw.end();
 });
 
 // Agent: submit server report

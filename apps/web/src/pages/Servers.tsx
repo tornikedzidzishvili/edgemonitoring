@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { api, type ServerInfo, type SshKeyInfo, type SshProbeResult } from "../lib/api";
 import { formatDateTime } from "../lib/format";
+import InstallAgentModal from "../components/InstallAgentModal";
 
 export default function Servers() {
   const [servers, setServers] = useState<ServerInfo[]>([]);
@@ -44,6 +45,8 @@ export default function Servers() {
 
   const [probingId, setProbingId] = useState<string | null>(null);
   const [probeResult, setProbeResult] = useState<SshProbeResult | null>(null);
+
+  const [installTarget, setInstallTarget] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     api.servers().then(setServers).catch(() => {
@@ -649,6 +652,20 @@ REPORT_INTERVAL_SECONDS=5`}
                         >
                           Edit
                         </button>
+                        {(() => {
+                          const canInstall = !!(s.ip && s.sshKeyId);
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => canInstall && setInstallTarget({ id: s.id, name: s.name })}
+                              disabled={!canInstall}
+                              title={!canInstall ? "Requires IP and an SSH key to be set on this server" : "Install monitoring agent via SSH"}
+                              className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-3 py-1.5 text-xs font-medium text-neon-amber transition-all hover:bg-neon-amber/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Install agent
+                            </button>
+                          );
+                        })()}
                         <button
                           type="button"
                           onClick={() => onDeleteServer(s.id)}
@@ -695,6 +712,15 @@ REPORT_INTERVAL_SECONDS=5`}
             {JSON.stringify(probeResult, null, 2)}
           </pre>
         </motion.div>
+      ) : null}
+
+      {installTarget ? (
+        <InstallAgentModal
+          serverId={installTarget.id}
+          serverName={installTarget.name}
+          onSuccess={refreshServers}
+          onClose={() => setInstallTarget(null)}
+        />
       ) : null}
     </motion.div>
   );

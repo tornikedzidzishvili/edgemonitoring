@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { API_BASE_URL, api, type ServerDetail, type ServerEndpoint, type ServerMetricsPoint } from "../lib/api";
 import { formatDateTime, formatUptime, formatPct as formatPctLib, formatMs } from "../lib/format";
+import InstallAgentModal from "../components/InstallAgentModal";
 
 type LivePoint = {
   t: string;
@@ -222,6 +223,7 @@ export default function ServerDetailPage() {
   const [detail, setDetail] = useState<ServerDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connection, setConnection] = useState<"connecting" | "open" | "reconnecting" | "closed">("connecting");
+  const [showInstallModal, setShowInstallModal] = useState(false);
 
   const [live, setLive] = useState<LivePoint[]>([]);
   const lastReportedAtRef = useRef<string | null>(null);
@@ -488,9 +490,25 @@ export default function ServerDetailPage() {
               <span>Uptime: {formatUptime(uptimeMs)}</span>
             </div>
           </div>
-          <Link to="/servers" className="hidden shrink-0 rounded-lg border border-slate-700/50 bg-obsidian-800/60 px-4 py-2 text-sm font-medium text-slate-300 transition-all hover:bg-obsidian-700/50 hover:text-white sm:block">
-            Back to Servers
-          </Link>
+          <div className="hidden shrink-0 items-center gap-2 sm:flex">
+            {(() => {
+              const canInstall = !!(detail?.ip && detail?.sshKeyId);
+              return (
+                <button
+                  type="button"
+                  onClick={() => canInstall && setShowInstallModal(true)}
+                  disabled={!canInstall}
+                  title={!canInstall ? "Requires IP and an SSH key to be set on this server" : "Install monitoring agent via SSH"}
+                  className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-4 py-2 text-sm font-medium text-neon-amber transition-all hover:bg-neon-amber/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Install agent
+                </button>
+              );
+            })()}
+            <Link to="/servers" className="rounded-lg border border-slate-700/50 bg-obsidian-800/60 px-4 py-2 text-sm font-medium text-slate-300 transition-all hover:bg-obsidian-700/50 hover:text-white">
+              Back to Servers
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -977,6 +995,17 @@ export default function ServerDetailPage() {
           })()}
         </div>
       )}
+
+      {showInstallModal && detail ? (
+        <InstallAgentModal
+          serverId={serverId}
+          serverName={detail.name}
+          onSuccess={() => {
+            api.server(serverId).then(setDetail).catch(() => {});
+          }}
+          onClose={() => setShowInstallModal(false)}
+        />
+      ) : null}
     </motion.div>
   );
 }
