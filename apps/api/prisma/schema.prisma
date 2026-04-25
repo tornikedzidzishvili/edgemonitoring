@@ -288,6 +288,23 @@ model DomainCheckResult {
   @@index([checkedAt])
 }
 
+// Container registry credentials used by the agent installer to pull the agent
+// image on customer servers. Singleton — there is only ever one row.
+//
+// `tokenEnc/Iv/Tag` follow the cryptoBox AES-256-GCM pattern. The token is
+// never stored or returned in plaintext; the API exposes only a `configured`
+// boolean. Generic across registries (default ghcr.io, but works for Docker
+// Hub, ECR, etc.).
+model AgentInstallSettings {
+  id          String   @id @default(cuid())
+  registryUrl String   @default("ghcr.io")
+  username    String?
+  tokenEnc    String?
+  tokenIv     String?
+  tokenTag    String?
+  updatedAt   DateTime @updatedAt
+}
+
 // Global alerting threshold settings (singleton)
 model ServerAlertSettings {
   id                String   @id @default(cuid())

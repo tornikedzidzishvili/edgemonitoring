@@ -10,7 +10,17 @@
  * scripts/install-agent.sh at the repo root. The API container does NOT have
  * access to the scripts/ directory at runtime, so the content is embedded here.
  * If you update scripts/install-agent.sh you MUST also update the constant
- * below to keep both in sync.
+ * below to keep both in sync, and vice versa.
+ *
+ * Registry token injection
+ * ------------------------
+ * When registryCredentials are provided, the plaintext token is prepended to
+ * the script body by replacing the "# REGISTRY_TOKEN_INJECTION_POINT" marker
+ * with a literal variable assignment BEFORE the script is piped to bash stdin.
+ * This keeps the token entirely out of argv (ps -ef would not expose it) and
+ * out of SSH environment variables (which most sshd configs reject). The token
+ * lives only in process memory on the remote host for the duration of the
+ * script execution.
  */
 
 import { Client } from "ssh2";
@@ -27,12 +37,22 @@ set -euo pipefail
 #     --api-url https://monitoring.edge.ge/api \\
 #     --api-key YOUR_AGENT_KEY \\
 #     --server-name my-server
+#
+# Optional registry login (for private images):
+#   --registry-url      Registry hostname (default: ghcr.io)
+#   --registry-username Registry username
+#   REGISTRY_TOKEN env var must be set (injected into script body by API — never passed as argv)
+
+# REGISTRY_TOKEN_INJECTION_POINT
+REGISTRY_TOKEN="\${REGISTRY_TOKEN:-}"
 
 INSTALL_DIR="/opt/edge-monitoring-agent"
 CENTRAL_API_URL=""
 AGENT_API_KEY=""
 SERVER_NAME=""
 REPORT_INTERVAL_SECONDS=30
+REGISTRY_URL=""
+REGISTRY_USERNAME=""
 
 usage() {
   cat <<EOF
@@ -42,27 +62,31 @@ Usage:
   install-agent.sh --api-url URL --api-key KEY --server-name NAME [--interval SECONDS] [--dir PATH]
 
 Required:
-  --api-url       Central API URL (e.g. https://monitoring.edge.ge/api)
-  --api-key       Agent API key (from the monitoring dashboard)
-  --server-name   Display name for this server
+  --api-url           Central API URL (e.g. https://monitoring.edge.ge/api)
+  --api-key           Agent API key (from the monitoring dashboard)
+  --server-name       Display name for this server
 
 Optional:
-  --interval      Report interval in seconds (default: 30)
-  --dir           Install directory (default: /opt/edge-monitoring-agent)
-  -h, --help      Show this help
+  --interval          Report interval in seconds (default: 30)
+  --dir               Install directory (default: /opt/edge-monitoring-agent)
+  --registry-url      Container registry hostname (default: ghcr.io)
+  --registry-username Registry login username (requires REGISTRY_TOKEN env var)
+  -h, --help          Show this help
 EOF
   exit 1
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --api-url)    CENTRAL_API_URL="$2"; shift 2 ;;
-    --api-key)    AGENT_API_KEY="$2"; shift 2 ;;
-    --server-name) SERVER_NAME="$2"; shift 2 ;;
-    --interval)   REPORT_INTERVAL_SECONDS="$2"; shift 2 ;;
-    --dir)        INSTALL_DIR="$2"; shift 2 ;;
-    -h|--help)    usage ;;
-    *)            echo "Unknown option: $1"; usage ;;
+    --api-url)           CENTRAL_API_URL="$2"; shift 2 ;;
+    --api-key)           AGENT_API_KEY="$2"; shift 2 ;;
+    --server-name)       SERVER_NAME="$2"; shift 2 ;;
+    --interval)          REPORT_INTERVAL_SECONDS="$2"; shift 2 ;;
+    --dir)               INSTALL_DIR="$2"; shift 2 ;;
+    --registry-url)      REGISTRY_URL="$2"; shift 2 ;;
+    --registry-username) REGISTRY_USERNAME="$2"; shift 2 ;;
+    -h|--help)           usage ;;
+    *)                   echo "Unknown option: $1"; usage ;;
   esac
 done
 
@@ -87,6 +111,16 @@ echo "  Directory:  $INSTALL_DIR"
 echo "  API URL:    $CENTRAL_API_URL"
 echo "  Server:     $SERVER_NAME"
 echo
+
+# Registry login — only when all three values are present.
+# Token is injected into the script body (not argv) to prevent ps-ef exposure.
+# Logout runs unconditionally after install so creds don't persist on the host.
+REGISTRY_LOGGED_IN=0
+if [[ -n "\${REGISTRY_URL:-}" && -n "\${REGISTRY_USERNAME:-}" && -n "\${REGISTRY_TOKEN:-}" ]]; then
+  echo "Logging into \${REGISTRY_URL} as \${REGISTRY_USERNAME}..."
+  echo "\$REGISTRY_TOKEN" | docker login "\$REGISTRY_URL" -u "\$REGISTRY_USERNAME" --password-stdin
+  REGISTRY_LOGGED_IN=1
+fi
 
 mkdir -p "$INSTALL_DIR"
 
@@ -120,6 +154,13 @@ cd "$INSTALL_DIR"
 $DC pull
 $DC up -d
 
+# Revoke registry credentials immediately after pulling so they don't persist
+# in /root/.docker/config.json on the customer host.
+if [[ "\${REGISTRY_LOGGED_IN:-0}" == "1" ]]; then
+  echo "Logging out of \${REGISTRY_URL}..."
+  docker logout "\$REGISTRY_URL" || true
+fi
+
 echo
 echo "Agent installed and running."
 echo "Logs: cd $INSTALL_DIR && $DC logs -f"
@@ -132,6 +173,13 @@ echo "To uninstall:     cd $INSTALL_DIR && $DC down && rm -rf $INSTALL_DIR"
 // Types
 // ---------------------------------------------------------------------------
 
+export type RegistryCredentials = {
+  registryUrl: string;
+  username: string;
+  /** Plaintext token — scrubbed from all NDJSON output, injected into script body (never argv). */
+  token: string;
+};
+
 export type InstallAgentParams = {
   host: string;
   port: number;
@@ -143,6 +191,13 @@ export type InstallAgentParams = {
   apiKey: string;
   serverName: string;
   timeoutMs?: number;
+  /**
+   * Optional container-registry credentials. When provided, the install script
+   * runs `docker login` before pulling the agent image and `docker logout`
+   * afterwards. The token is injected into the script body (not argv) to
+   * prevent exposure via `ps -ef` or SSH env vars.
+   */
+  registryCredentials?: RegistryCredentials;
 };
 
 export type InstallAgentResult = {
@@ -225,11 +280,14 @@ export async function installAgentOverSsh(
 ): Promise<InstallAgentResult> {
   const timeoutMs = params.timeoutMs ?? 5 * 60 * 1000; // 5-minute wall-clock
 
-  // Scrub the plaintext API key from any line before emitting it, so a noisy
-  // installer script that echoes its arguments cannot leak the key into the
-  // NDJSON stream that the browser reads.
+  // Scrub sensitive values from any line before emitting — defense in depth
+  // so a noisy installer script cannot leak secrets into the NDJSON stream.
+  // Both the API key and the registry token (if present) are scrubbed.
   function safeEmit(jsonLine: string): void {
-    const scrubbed = jsonLine.replaceAll(params.apiKey, "[REDACTED]");
+    let scrubbed = jsonLine.replaceAll(params.apiKey, "[REDACTED]");
+    if (params.registryCredentials) {
+      scrubbed = scrubbed.replaceAll(params.registryCredentials.token, "[REDACTED]");
+    }
     emit(scrubbed);
   }
 
@@ -298,8 +356,18 @@ export async function installAgentOverSsh(
     const escapedApiKey = shellSingleQuote(params.apiKey);
     const escapedServerName = shellSingleQuote(params.serverName);
 
+    // Registry args are passed as flags (values are safe strings from our own
+    // DB, but we escape them for defence-in-depth). The token is NOT passed as
+    // a flag — it is injected into the script body below.
+    let registryArgs = "";
+    if (params.registryCredentials) {
+      const escapedRegistryUrl = shellSingleQuote(params.registryCredentials.registryUrl);
+      const escapedRegistryUsername = shellSingleQuote(params.registryCredentials.username);
+      registryArgs = ` --registry-url ${escapedRegistryUrl} --registry-username ${escapedRegistryUsername}`;
+    }
+
     const remoteCmd =
-      `bash -s -- --api-url ${escapedApiUrl} --api-key ${escapedApiKey} --server-name ${escapedServerName}`;
+      `bash -s -- --api-url ${escapedApiUrl} --api-key ${escapedApiKey} --server-name ${escapedServerName}${registryArgs}`;
 
     return new Promise<InstallAgentResult>((resolve, reject) => {
       conn.exec(remoteCmd, { pty: false }, (err, stream) => {
@@ -324,8 +392,17 @@ export async function installAgentOverSsh(
           resolve({ ok, exitCode: code });
         });
 
+        // Prepare the script body. If registry credentials are provided,
+        // replace the injection-point marker with a literal token assignment
+        // so the token travels only via piped stdin — never via argv or env.
+        let scriptToSend = INSTALL_SCRIPT;
+        if (params.registryCredentials) {
+          const tokenLine = `REGISTRY_TOKEN=${shellSingleQuote(params.registryCredentials.token)}\n`;
+          scriptToSend = scriptToSend.replace("# REGISTRY_TOKEN_INJECTION_POINT", tokenLine);
+        }
+
         // Pipe the install script body into stdin, then signal EOF
-        stream.write(INSTALL_SCRIPT);
+        stream.write(scriptToSend);
         stream.end();
       });
     });

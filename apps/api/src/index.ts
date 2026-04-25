@@ -19,6 +19,7 @@ import { profileRoutes } from "./routes/profile.js";
 import { passkeyRoutes } from "./routes/passkeys.js";
 import { sharedHostingServerRoutes } from "./routes/sharedHostingServers.js";
 import { adminDbHealthRoutes } from "./routes/adminDbHealth.js";
+import { agentInstallSettingsRoutes } from "./routes/agentInstallSettings.js";
 import { cleanExpiredSessions } from "./services/userAuth.js";
 import { startServerAlertScheduler } from "./serverAlertScheduler.js";
 import { seedDevAdmin } from "./seed.js";
@@ -45,6 +46,7 @@ await app.register(profileRoutes);
 await app.register(passkeyRoutes);
 await app.register(sharedHostingServerRoutes);
 await app.register(adminDbHealthRoutes);
+await app.register(agentInstallSettingsRoutes);
 
 // Clean expired sessions periodically (every hour)
 setInterval(() => {
@@ -1156,6 +1158,28 @@ app.post("/admin/servers/:id/install-agent", async (req, reply) => {
     data: { apiKeyHash: newApiKeyHash }
   });
 
+  // --- 5b. Read agent install settings (registry credentials for docker pull) ---
+  // The settings row is a singleton and may not exist — that's fine, the
+  // installer falls back to no docker login (works for public images).
+  let registryCredentials: { registryUrl: string; username: string; token: string } | undefined;
+  const installSettings = await prisma.agentInstallSettings.findFirst();
+  if (
+    installSettings?.username &&
+    installSettings?.tokenEnc &&
+    installSettings?.tokenIv &&
+    installSettings?.tokenTag
+  ) {
+    const plainToken = decryptString(
+      { enc: installSettings.tokenEnc, iv: installSettings.tokenIv, tag: installSettings.tokenTag },
+      env.SSH_KEY_MASTER_SECRET
+    );
+    registryCredentials = {
+      registryUrl: installSettings.registryUrl,
+      username: installSettings.username,
+      token: plainToken
+    };
+  }
+
   // --- 6 + 7 + 8 + 9 + 10 + 11 + 12. SSH install (all phases handled inside) ---
   await installAgentOverSsh(
     {
@@ -1167,7 +1191,8 @@ app.post("/admin/servers/:id/install-agent", async (req, reply) => {
       apiUrl: env.PUBLIC_API_URL,
       apiKey: plainApiKey,
       serverName: server.name,
-      timeoutMs: 5 * 60 * 1000
+      timeoutMs: 5 * 60 * 1000,
+      registryCredentials
     },
     emit
   );

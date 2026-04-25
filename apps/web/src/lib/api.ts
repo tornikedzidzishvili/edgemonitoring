@@ -431,6 +431,13 @@ export type SyncedDomain = {
   accountName: string;
 };
 
+// Agent install / registry credential settings
+export type AgentInstallSettingsResponse = {
+  configured: boolean;
+  username: string | null;
+  registryUrl: string;
+};
+
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
 const TOKEN_KEY = "edge_monitoring_token";
@@ -743,5 +750,14 @@ export const api = {
     return apiGet<AlertsResponse>(`/alerts${qs ? `?${qs}` : ""}`);
   },
   alertCount: () => apiGet<AlertCountResponse>(`/alerts/count`),
-  resolveAlert: (alertId: string) => apiPost<{ ok: boolean }>(`/alerts/${encodeURIComponent(alertId)}/resolve`, {})
+  resolveAlert: (alertId: string) => apiPost<{ ok: boolean }>(`/alerts/${encodeURIComponent(alertId)}/resolve`, {}),
+
+  // Agent install / container registry credentials
+  agentInstallSettings: () =>
+    apiGet<AgentInstallSettingsResponse>(`/settings/agent-install`),
+  saveAgentInstallSettings: (params: {
+    username?: string | null;
+    token?: string | null;
+    registryUrl?: string;
+  }) => apiPatch<AgentInstallSettingsResponse>(`/settings/agent-install`, params)
 };

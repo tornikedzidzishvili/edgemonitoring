@@ -7,8 +7,9 @@ import AlertsSettings from "../components/settings/AlertsSettings";
 import TemplatesSettings from "../components/settings/TemplatesSettings";
 import ServerAlertSettings from "../components/settings/ServerAlertSettings";
 import SharedHostingSettings from "../components/settings/SharedHostingSettings";
+import RegistryCredentialsSection from "../components/settings/RegistryCredentialsSection";
 
-type Tab = "users" | "smtp" | "sms" | "alerts" | "server-alerts" | "templates" | "shared-hosting";
+type Tab = "users" | "smtp" | "sms" | "alerts" | "server-alerts" | "templates" | "shared-hosting" | "registry";
 
 const tabs: { id: Tab; label: string; icon: JSX.Element }[] = [
   {
@@ -87,6 +88,17 @@ const tabs: { id: Tab; label: string; icon: JSX.Element }[] = [
         <line x1="10" x2="8" y1="9" y2="9" />
       </svg>
     )
+  },
+  {
+    id: "registry",
+    label: "Registry",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+        <line x1="12" y1="22.08" x2="12" y2="12" />
+      </svg>
+    )
   }
 ];
 
@@ -145,6 +157,7 @@ export default function Settings() {
         {activeTab === "alerts" && <AlertsSettings />}
         {activeTab === "server-alerts" && <ServerAlertSettings />}
         {activeTab === "templates" && <TemplatesSettings />}
+        {activeTab === "registry" && <RegistryCredentialsSection />}
       </motion.div>
     </motion.div>
   );
