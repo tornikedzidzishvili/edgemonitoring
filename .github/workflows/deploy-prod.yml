@@ -72,6 +72,18 @@ jobs:
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
+      - name: Build & push Agent image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./apps/agent/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-agent:${{ steps.meta.outputs.sha_tag }}
+            ${{ env.IMAGE_PREFIX }}-agent:latest
+          cache-from: type=gha,scope=agent
+          cache-to: type=gha,mode=max,scope=agent
+
   deploy:
     runs-on: ubuntu-latest
     needs: build-and-push
