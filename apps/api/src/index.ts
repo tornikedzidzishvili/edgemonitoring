@@ -99,6 +99,9 @@ app.get("/servers/dashboard", async (req) => {
   ]);
 
   const serverIds = servers.map((s) => s.id);
+
+  // Fetch agent report presence for the last 12h (used to determine whether the
+  // server has been active at all, and to fill buckets where no offline alert exists).
   const reports = await prisma.serverReport.findMany({
     where: {
       serverId: { in: serverIds },
@@ -108,12 +111,46 @@ app.get("/servers/dashboard", async (req) => {
     select: { serverId: true, reportedAt: true }
   });
 
-  // Group reports by server
+  // Historical downtime: includes resolved alerts. Do not add status:"active" filter —
+  // see EMS bug repro: resolving alerts collapsed chart to 100%.
+  //
+  // We fetch ALL offline alerts (active + resolved) whose downtime window overlaps the
+  // last 12h. Each alert contributes a downtime window of [triggeredAt, resolvedAt ?? now].
+  // A bucket is "down" if any offline alert window overlaps with it, regardless of whether
+  // the alert has since been resolved. This makes the metric immutable with respect to
+  // alert resolution: resolving an alert does not alter historical availability values.
+  const offlineAlerts = await prisma.serverAlert.findMany({
+    where: {
+      serverId: { in: serverIds },
+      type: "offline",
+      // Include any alert whose downtime window might touch the 12h window:
+      // alerts triggered before the window end (now) AND not yet resolved before the window start.
+      triggeredAt: { lte: new Date(now) },
+      OR: [
+        { resolvedAt: null },              // still active — downtime extends to now
+        { resolvedAt: { gte: since12h } }  // resolved but downtime ended within or after the window
+      ]
+    },
+    select: { serverId: true, triggeredAt: true, resolvedAt: true }
+  });
+
+  // Group report timestamps by server
   const reportsByServer = new Map<string, Date[]>();
   for (const r of reports) {
     const arr = reportsByServer.get(r.serverId) ?? [];
     arr.push(r.reportedAt);
     reportsByServer.set(r.serverId, arr);
+  }
+
+  // Group offline alert windows by server
+  const offlineWindowsByServer = new Map<string, Array<{ start: number; end: number }>>();
+  for (const a of offlineAlerts) {
+    const arr = offlineWindowsByServer.get(a.serverId) ?? [];
+    arr.push({
+      start: a.triggeredAt.getTime(),
+      end: a.resolvedAt ? a.resolvedAt.getTime() : now
+    });
+    offlineWindowsByServer.set(a.serverId, arr);
   }
 
   // Build 24 buckets for last 12 hours
@@ -122,13 +159,31 @@ app.get("/servers/dashboard", async (req) => {
 
   const serversWithUptime = servers.map((s) => {
     const serverReports = reportsByServer.get(s.id) ?? [];
+    const offlineWindows = offlineWindowsByServer.get(s.id) ?? [];
     const isActive = s.lastSeenAt && s.lastSeenAt >= activeThreshold;
 
-    // Build bucket array: true if there was at least one report in that bucket
+    // Build bucket array.
+    //
+    // Bucket logic (in priority order):
+    //   1. If an offline alert window covers any part of this bucket → false (down).
+    //      This is the authoritative historical signal: an offline alert was firing,
+    //      meaning the server was confirmed offline during this period. Resolved alerts
+    //      are included so this value does not change when an alert is resolved.
+    //   2. If there was at least one agent report in this bucket → true (up).
+    //   3. Otherwise → false (no data / unknown, displayed as grey in the UI).
     const buckets: boolean[] = [];
     for (let i = 0; i < bucketCount; i++) {
       const bucketStart = bucketStartTime + i * bucketMs;
       const bucketEnd = bucketStart + bucketMs;
+
+      // Check for offline alert overlap: alert window [start, end) overlaps bucket [bucketStart, bucketEnd)
+      const isDown = offlineWindows.some((w) => w.start < bucketEnd && w.end > bucketStart);
+      if (isDown) {
+        buckets.push(false);
+        continue;
+      }
+
+      // No offline alert — fall back to report presence
       const hasReport = serverReports.some((r) => {
         const t = r.getTime();
         return t >= bucketStart && t < bucketEnd;
