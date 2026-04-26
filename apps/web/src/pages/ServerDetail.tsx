@@ -316,43 +316,92 @@ export default function ServerDetailPage() {
 
   useEffect(() => {
     if (!serverId) return;
-    setConnection("connecting");
-    const url = `${API_BASE_URL}/servers/${encodeURIComponent(serverId)}/stream`;
-    const es = new EventSource(url);
-    es.onopen = () => setConnection("open");
-    const onError = () => setConnection((prev) => (prev === "closed" ? "closed" : "reconnecting"));
-    es.onerror = onError;
-    es.addEventListener("report", (evt) => {
+
+    let es: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let backoffMs = 1000;
+    // When true, the cleanup function has run — don't start another cycle.
+    let unmounted = false;
+
+    function attachReportHandler(source: EventSource) {
+      source.addEventListener("report", (evt) => {
+        try {
+          const msg = JSON.parse((evt as MessageEvent).data) as {
+            reportedAt: string;
+            payload: unknown;
+            server?: { name?: string };
+          };
+          if (!msg?.reportedAt) return;
+          if (lastReportedAtRef.current && msg.reportedAt <= lastReportedAtRef.current) return;
+          lastReportedAtRef.current = msg.reportedAt;
+          const snap = parseAgentSnapshot(msg.payload);
+          setDetail((prev) =>
+            prev
+              ? { ...prev, name: msg?.server?.name ?? prev.name, latestReport: { reportedAt: msg.reportedAt, payload: msg.payload } }
+              : prev
+          );
+          if (snap) {
+            const memPct =
+              typeof snap.memUsed === "number" && typeof snap.memTotal === "number" && snap.memTotal > 0
+                ? clamp01(snap.memUsed / snap.memTotal)
+                : null;
+            setLive((prev) => {
+              const next: LivePoint = {
+                t: new Date(msg.reportedAt).toLocaleTimeString(),
+                cpuLoad: typeof snap.cpuLoad === "number" ? snap.cpuLoad : null,
+                memUsedPct: memPct === null ? null : Math.round(memPct * 1000) / 10,
+                memUsedBytes: typeof snap.memUsed === "number" ? snap.memUsed : null,
+                memTotalBytes: typeof snap.memTotal === "number" ? snap.memTotal : null,
+                reportedAt: msg.reportedAt
+              };
+              const merged = [...prev, next];
+              return merged.slice(Math.max(0, merged.length - 120));
+            });
+          }
+        } catch {}
+      });
+    }
+
+    async function connect() {
+      if (unmounted) return;
+      setConnection("connecting");
       try {
-        const msg = JSON.parse((evt as MessageEvent).data) as { reportedAt: string; payload: unknown; server?: { name?: string } };
-        if (!msg?.reportedAt) return;
-        if (lastReportedAtRef.current && msg.reportedAt <= lastReportedAtRef.current) return;
-        lastReportedAtRef.current = msg.reportedAt;
-        const snap = parseAgentSnapshot(msg.payload);
-        setDetail((prev) =>
-          prev ? { ...prev, name: msg?.server?.name ?? prev.name, latestReport: { reportedAt: msg.reportedAt, payload: msg.payload } } : prev
-        );
-        if (snap) {
-          const memPct =
-            typeof snap.memUsed === "number" && typeof snap.memTotal === "number" && snap.memTotal > 0
-              ? clamp01(snap.memUsed / snap.memTotal)
-              : null;
-          setLive((prev) => {
-            const next: LivePoint = {
-              t: new Date(msg.reportedAt).toLocaleTimeString(),
-              cpuLoad: typeof snap.cpuLoad === "number" ? snap.cpuLoad : null,
-              memUsedPct: memPct === null ? null : Math.round(memPct * 1000) / 10,
-              memUsedBytes: typeof snap.memUsed === "number" ? snap.memUsed : null,
-              memTotalBytes: typeof snap.memTotal === "number" ? snap.memTotal : null,
-              reportedAt: msg.reportedAt
-            };
-            const merged = [...prev, next];
-            return merged.slice(Math.max(0, merged.length - 120));
-          });
-        }
-      } catch {}
-    });
-    return () => { setConnection("closed"); es.close(); };
+        const { ticket } = await api.serverStreamTicket(serverId);
+        if (unmounted) return;
+        const url = `${API_BASE_URL}/servers/${encodeURIComponent(serverId)}/stream?ticket=${encodeURIComponent(ticket)}`;
+        const source = new EventSource(url);
+        es = source;
+        source.onopen = () => {
+          if (unmounted) { source.close(); return; }
+          backoffMs = 1000; // reset on successful open
+          setConnection("open");
+        };
+        source.onerror = () => {
+          // Close immediately so the browser doesn't retry the now-consumed ticket.
+          source.close();
+          es = null;
+          if (unmounted) return;
+          setConnection("reconnecting");
+          reconnectTimer = setTimeout(() => {
+            backoffMs = Math.min(backoffMs * 2, 10000);
+            connect().catch(() => {});
+          }, backoffMs);
+        };
+        attachReportHandler(source);
+      } catch {
+        // Ticket fetch failed (401 = session gone, 404 = server deleted). Stop retrying.
+        if (!unmounted) setConnection("closed");
+      }
+    }
+
+    connect().catch(() => {});
+
+    return () => {
+      unmounted = true;
+      if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+      if (es !== null) { es.close(); es = null; }
+      setConnection("closed");
+    };
   }, [serverId]);
 
   const latestSnap = useMemo(() => parseAgentSnapshot(detail?.latestReport?.payload ?? null), [detail?.latestReport?.payload]);

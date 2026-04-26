@@ -772,5 +772,12 @@ export const api = {
   }) => apiPatch<AgentInstallSettingsResponse>(`/settings/agent-install`, params),
 
   // Branding (public endpoint — no auth required)
-  brandingSettings: () => apiGet<BrandingInfo>(`/branding`)
+  brandingSettings: () => apiGet<BrandingInfo>(`/branding`),
+
+  // SSE stream ticket — short-lived single-use token for the EventSource auth workaround
+  serverStreamTicket: (serverId: string) =>
+    apiPost<{ ticket: string; expiresAt: string }>(
+      `/servers/${encodeURIComponent(serverId)}/stream-ticket`,
+      {}
+    )
 };

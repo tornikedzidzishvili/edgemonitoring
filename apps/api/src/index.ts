@@ -29,6 +29,7 @@ import { startDataRetention } from "./dataRetention.js";
 import { routeGuardPlugin } from "./plugins/routeGuard.js";
 import { rateLimiterPlugin } from "./plugins/rateLimiter.js";
 
+import { issueTicket, consumeTicket } from "./services/sseTickets.js";
 const env = getEnv();
 const app = Fastify({ logger: true });
 
@@ -401,9 +402,67 @@ app.get("/servers/:id/endpoints", async (req) => {
   };
 });
 
+// Issue a short-lived, single-use ticket that lets the browser open the SSE
+// stream without an Authorization header.  The native EventSource API cannot
+// send custom headers, so the client exchanges a Bearer token here for a
+// 60-second ticket and then appends ?ticket=<value> to the stream URL.
+//
+// Auth: standard Bearer (routeGuard covers /servers/* automatically).
+// Rate limit: falls under the default general rate limiter (100/min).
+app.post("/servers/:id/stream-ticket", async (req, reply) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+
+  // Verify the server exists before issuing a ticket — prevents enumeration of
+  // valid server IDs via the ticket endpoint.
+  const server = await prisma.server.findUnique({ where: { id: params.id } });
+  if (!server) throw app.httpErrors.notFound("server-not-found");
+
+  // req.user is guaranteed to be set here because routeGuard ran requireAuth
+  // for this /servers/* path.
+  const userId = req.user!.id;
+
+  const { ticket, expiresAt } = issueTicket(userId, server.id);
+
+  app.log.info(
+    { userId, serverId: server.id, expiresAt },
+    "sse-ticket-issued"
+  );
+
+  return reply.status(200).send({
+    ticket,
+    expiresAt: expiresAt.toISOString()
+  });
+});
+
 // Realtime: server report stream (SSE). Browser will auto-reconnect to keep the connection always up.
+//
+// Auth: two valid paths —
+//   1. Standard Bearer token (routeGuard handles this for /servers/* routes).
+//   2. ?ticket=<value>: a single-use SSE ticket issued by POST /servers/:id/stream-ticket.
+//      The ticket path bypasses the Bearer check in routeGuard (see the surgical
+//      exception there) and is validated + consumed here instead.
 app.get("/servers/:id/stream", async (req, reply) => {
   const params = z.object({ id: z.string().min(1) }).parse(req.params);
+  const query = z.object({ ticket: z.string().min(1).optional() }).parse(req.query);
+
+  // --- Ticket-based auth (EventSource path) ---
+  if (query.ticket !== undefined) {
+    const result = consumeTicket(query.ticket, params.id);
+    if (result.error !== null) {
+      app.log.warn(
+        { serverId: params.id, reason: result.error },
+        "sse-ticket-rejected"
+      );
+      return reply.status(401).send({ error: "unauthorized", message: "Invalid or expired SSE ticket" });
+    }
+    // Ticket is valid and consumed; log who is connecting.
+    app.log.info(
+      { userId: result.data.userId, serverId: params.id },
+      "sse-ticket-consumed"
+    );
+  }
+  // --- Bearer auth path: routeGuard already ran requireAuth for /servers/* ---
+  // No additional check needed here; req.user is already populated.
 
   const server = await prisma.server.findUnique({ where: { id: params.id } });
   if (!server) throw app.httpErrors.notFound("server-not-found");

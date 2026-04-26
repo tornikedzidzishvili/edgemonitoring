@@ -132,6 +132,31 @@ function stripQuery(url: string): string {
   return qi === -1 ? url : url.slice(0, qi);
 }
 
+/**
+ * Returns true when the request is a GET to /servers/:id/stream that carries a
+ * ?ticket= query parameter.  We use the registered route pattern
+ * (routeOptions.url === "/servers/:id/stream") so URL-encoded path tricks cannot
+ * fool the check, and we require the query param to be non-empty so a bare
+ * /servers/abc/stream without a ticket still goes through Bearer auth.
+ */
+function isSseStreamWithTicket(
+  routeOptions: { url?: string } | undefined,
+  rawUrl: string
+): boolean {
+  const routePattern = routeOptions?.url;
+  if (routePattern !== "/servers/:id/stream") return false;
+
+  // Check the raw URL for a non-empty ?ticket= param.
+  try {
+    // rawUrl may be a path+query string; prefix with a dummy origin so URL()
+    // can parse it reliably.
+    const parsed = new URL(rawUrl, "http://x");
+    return (parsed.searchParams.get("ticket") ?? "").length > 0;
+  } catch {
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
@@ -150,6 +175,26 @@ async function routeGuardPluginImpl(app: FastifyInstance): Promise<void> {
 
       // --- Public allow-list (checked first — short-circuit for hot paths) ---
       if (isPublicRoute(method, url)) {
+        return;
+      }
+
+      // --- SSE stream ticket bypass ---
+      //
+      // The native browser EventSource API cannot send custom headers, so it
+      // cannot attach an Authorization: Bearer token.  To work around this, the
+      // client first calls POST /servers/:id/stream-ticket (Bearer-authenticated)
+      // to obtain a short-lived, single-use ticket, then opens the SSE URL with
+      // ?ticket=<value>.  When that query parameter is present on the exact GET
+      // /servers/:id/stream path we skip the Bearer check here and let the stream
+      // handler validate and consume the ticket itself.
+      //
+      // Constraints are intentionally narrow — only this exact path pattern,
+      // only GET, only when the query param is present — so no other /servers/*
+      // route is accidentally widened.
+      if (
+        method === "GET" &&
+        isSseStreamWithTicket(req.routeOptions as { url?: string } | undefined, req.url)
+      ) {
         return;
       }
 
