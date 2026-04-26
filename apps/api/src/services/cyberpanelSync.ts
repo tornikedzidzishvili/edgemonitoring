@@ -104,11 +104,11 @@ export async function syncCyberPanel(
   // --- 1. Pre-validate structural requirements ---
   if (!server.sshKeyId || !server.sshKey) {
     console.warn(
-      `[cyberpanel-sync] skip serverId=${server.id} reason=missing-ssh-config`
+      `[cyberpanel-sync] skip serverId=${server.id} reason=missing-ssh-key`
     );
     await prisma.sharedHostingServer.update({
       where: { id: server.id },
-      data: { lastSyncError: "missing-ssh-config" },
+      data: { lastSyncError: "missing-ssh-key" },
     });
     return;
   }
@@ -119,11 +119,11 @@ export async function syncCyberPanel(
   const resolvedHost = server.sshHost ?? server.apiUrl;
   if (!resolvedHost) {
     console.warn(
-      `[cyberpanel-sync] skip serverId=${server.id} reason=missing-ssh-config`
+      `[cyberpanel-sync] skip serverId=${server.id} reason=missing-ssh-host`
     );
     await prisma.sharedHostingServer.update({
       where: { id: server.id },
-      data: { lastSyncError: "missing-ssh-config" },
+      data: { lastSyncError: "missing-ssh-host" },
     });
     return;
   }
