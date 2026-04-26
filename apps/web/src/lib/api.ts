@@ -405,6 +405,7 @@ export type SharedHostingServerDetail = {
   apiUrl: string | null;
   hasApiKey: boolean;
   hasCredentials: boolean;
+  sshHost: string | null;
   sshKeyId: string | null;
   sshUser: string | null;
   sshPort: number | null;
@@ -694,6 +695,7 @@ export const api = {
     apiKey?: string;
     username?: string;
     password?: string;
+    sshHost?: string | null;
     sshKeyId?: string;
     sshUser?: string;
     sshPort?: number;
@@ -709,6 +711,7 @@ export const api = {
       apiKey?: string | null;
       username?: string | null;
       password?: string | null;
+      sshHost?: string | null;
       sshKeyId?: string | null;
       sshUser?: string | null;
       sshPort?: number | null;

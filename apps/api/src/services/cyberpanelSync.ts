@@ -49,8 +49,11 @@ interface CyberPanelServer {
   sshKeyId: string | null;
   sshUser: string | null;
   sshPort: number | null;
-  // The ip/hostname field to connect to — stored as apiUrl for CyberPanel rows
-  // (consistent with how the Plesk path uses apiUrl for its base URL).
+  // EMS-31: sshHost is the canonical host/IP for CyberPanel SSH connections.
+  // apiUrl is kept for the sshHost ?? apiUrl fallback so that any production
+  // rows that pre-date EMS-31 (which stored the host in apiUrl) continue to
+  // work until they are re-saved with an explicit sshHost value.
+  sshHost: string | null;
   apiUrl: string | null;
   sshKey: {
     privateKeyEnc: string;
@@ -110,8 +113,11 @@ export async function syncCyberPanel(
     return;
   }
 
-  // apiUrl holds the host/IP for CyberPanel rows (nullable in schema).
-  if (!server.apiUrl) {
+  // EMS-31: sshHost is the canonical host/IP for CyberPanel SSH connections.
+  // Fall back to apiUrl for rows that pre-date EMS-31 (none expected in
+  // production, but kept as a safety net).
+  const resolvedHost = server.sshHost ?? server.apiUrl;
+  if (!resolvedHost) {
     console.warn(
       `[cyberpanel-sync] skip serverId=${server.id} reason=missing-ssh-config`
     );
@@ -180,7 +186,7 @@ export async function syncCyberPanel(
     // The ssh connection timeout is set to SYNC_TIMEOUT_MS so that if the host
     // is unreachable the connect itself times out within the overall budget.
     const session = await openSshSession({
-      host: server.apiUrl as string,
+      host: resolvedHost,
       port: server.sshPort ?? 22,
       username: server.sshUser ?? "root",
       privateKey,

@@ -234,7 +234,8 @@ model SharedHostingServer {
   passwordTag    String?
 
   // SSH access — used by CyberPanel and other agentless polling types.
-  // All three fields are nullable so existing Plesk/manual rows are unaffected.
+  // All fields are nullable so existing Plesk/manual rows are unaffected.
+  sshHost        String?  // SSH host (IP or hostname); used by CyberPanel and any other agentless-SSH panel type
   sshKeyId       String?  // FK to SshKey; null for non-SSH panel types
   sshKey         SshKey?  @relation(fields: [sshKeyId], references: [id])
   sshUser        String?  // SSH login username (e.g., "root")

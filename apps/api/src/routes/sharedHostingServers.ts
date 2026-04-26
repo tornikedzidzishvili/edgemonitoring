@@ -32,6 +32,7 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
         name: s.name,
         type: s.type,
         apiUrl: s.apiUrl,
+        sshHost: s.sshHost,
         hasApiKey: !!(s.apiKeyEnc),
         hasCredentials: !!(s.usernameEnc && s.passwordEnc),
         sshKeyId: s.sshKeyId,
@@ -77,6 +78,7 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
         name: server.name,
         type: server.type,
         apiUrl: server.apiUrl,
+        sshHost: server.sshHost,
         hasApiKey: !!(server.apiKeyEnc),
         hasCredentials: !!(server.usernameEnc && server.passwordEnc),
         sshKeyId: server.sshKeyId,
@@ -114,6 +116,8 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
         sshKeyId: z.string().min(1).nullable().optional(),
         sshUser: z.string().min(1).optional(),
         sshPort: z.number().int().min(1).max(65535).optional(),
+        // EMS-31: dedicated SSH host/IP for CyberPanel rows; required when type is "cyberpanel"
+        sshHost: z.string().min(1).max(253).nullable().optional(),
         syncAll: z.boolean().default(true),
         enabled: z.boolean().default(true)
       })
@@ -133,6 +137,12 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
           error: "sshKeyId is required and must reference an existing SSH key when type is 'cyberpanel'"
         });
       }
+      // EMS-31: sshHost is the canonical host/IP for CyberPanel SSH connections.
+      if (!body.sshHost) {
+        return reply.status(400).send({
+          error: "sshHost is required when type is 'cyberpanel'"
+        });
+      }
       // Apply defaults for optional SSH fields when type is cyberpanel
       if (body.sshUser === undefined) body.sshUser = "root";
       if (body.sshPort === undefined) body.sshPort = 22;
@@ -147,6 +157,7 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
       sshKeyId?: string | null;
       sshUser?: string;
       sshPort?: number;
+      sshHost?: string | null;
       apiKeyEnc?: string;
       apiKeyIv?: string;
       apiKeyTag?: string;
@@ -169,6 +180,7 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
     if (body.sshKeyId !== undefined) data.sshKeyId = body.sshKeyId;
     if (body.sshUser !== undefined) data.sshUser = body.sshUser;
     if (body.sshPort !== undefined) data.sshPort = body.sshPort;
+    if (body.sshHost !== undefined) data.sshHost = body.sshHost;
 
     // Encrypt API key if provided
     if (body.apiKey) {
@@ -202,6 +214,7 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
         name: server.name,
         type: server.type,
         apiUrl: server.apiUrl,
+        sshHost: server.sshHost,
         hasApiKey: !!(server.apiKeyEnc),
         hasCredentials: !!(server.usernameEnc && server.passwordEnc),
         sshKeyId: server.sshKeyId,
@@ -229,6 +242,8 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
         sshKeyId: z.string().min(1).nullable().optional(),
         sshUser: z.string().min(1).optional(),
         sshPort: z.number().int().min(1).max(65535).optional(),
+        // EMS-31: dedicated SSH host/IP for CyberPanel rows; required when resolved type is "cyberpanel"
+        sshHost: z.string().min(1).max(253).nullable().optional(),
         syncAll: z.boolean().optional(),
         enabled: z.boolean().optional()
       })
@@ -257,6 +272,14 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
           error: "sshKeyId is required and must reference an existing SSH key when type is 'cyberpanel'"
         });
       }
+
+      // EMS-31: resolve the effective sshHost — body wins, fall back to stored value.
+      const resolvedSshHost = body.sshHost !== undefined ? body.sshHost : existing.sshHost;
+      if (!resolvedSshHost) {
+        return reply.status(400).send({
+          error: "sshHost is required when type is 'cyberpanel'"
+        });
+      }
     }
 
     const data: {
@@ -268,6 +291,7 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
       sshKeyId?: string | null;
       sshUser?: string;
       sshPort?: number;
+      sshHost?: string | null;
       apiKeyEnc?: string | null;
       apiKeyIv?: string | null;
       apiKeyTag?: string | null;
@@ -289,6 +313,7 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
     if (body.sshKeyId !== undefined) data.sshKeyId = body.sshKeyId;
     if (body.sshUser !== undefined) data.sshUser = body.sshUser;
     if (body.sshPort !== undefined) data.sshPort = body.sshPort;
+    if (body.sshHost !== undefined) data.sshHost = body.sshHost;
 
     // When switching TO cyberpanel and the caller hasn't supplied sshUser/sshPort,
     // apply defaults only if the stored values are also absent.
@@ -344,6 +369,7 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
         name: server.name,
         type: server.type,
         apiUrl: server.apiUrl,
+        sshHost: server.sshHost,
         hasApiKey: !!(server.apiKeyEnc),
         hasCredentials: !!(server.usernameEnc && server.passwordEnc),
         sshKeyId: server.sshKeyId,

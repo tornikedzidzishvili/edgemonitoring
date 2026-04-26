@@ -46,6 +46,7 @@ export default function SharedHostingSettings() {
   const [formApiKey, setFormApiKey] = useState("");
   const [formUsername, setFormUsername] = useState("");
   const [formPassword, setFormPassword] = useState("");
+  const [formSshHost, setFormSshHost] = useState("");
   const [formSshKeyId, setFormSshKeyId] = useState("");
   const [formSshUser, setFormSshUser] = useState("root");
   const [formSshPort, setFormSshPort] = useState("22");
@@ -94,6 +95,7 @@ export default function SharedHostingSettings() {
     setFormApiKey("");
     setFormUsername("");
     setFormPassword("");
+    setFormSshHost("");
     setFormSshKeyId("");
     setFormSshUser("root");
     setFormSshPort("22");
@@ -119,6 +121,7 @@ export default function SharedHostingSettings() {
     setFormApiKey("");
     setFormUsername("");
     setFormPassword("");
+    setFormSshHost(server.sshHost ?? "");
     setFormSshKeyId(server.sshKeyId || "");
     setFormSshUser(server.sshUser || "root");
     setFormSshPort(server.sshPort ? String(server.sshPort) : "22");
@@ -175,6 +178,7 @@ export default function SharedHostingSettings() {
           apiKey: formType === "plesk" ? (formApiKey.trim() || undefined) : undefined,
           username: formType === "plesk" ? (formUsername.trim() || undefined) : undefined,
           password: formType === "plesk" ? (formPassword.trim() || undefined) : undefined,
+          sshHost: formType === "cyberpanel" ? (formSshHost.trim() || null) : undefined,
           sshKeyId: formType === "cyberpanel" ? (formSshKeyId || undefined) : undefined,
           sshUser: formType === "cyberpanel" ? (formSshUser.trim() || undefined) : undefined,
           sshPort: formType === "cyberpanel" && formSshPort ? Number(formSshPort) : undefined,
@@ -190,6 +194,7 @@ export default function SharedHostingSettings() {
           apiKey: formType === "plesk" ? (formApiKey.trim() || undefined) : undefined,
           username: formType === "plesk" ? (formUsername.trim() || undefined) : undefined,
           password: formType === "plesk" ? (formPassword.trim() || undefined) : undefined,
+          sshHost: formType === "cyberpanel" ? (formSshHost.trim() || null) : undefined,
           sshKeyId: formType === "cyberpanel" ? (formSshKeyId || null) : null,
           sshUser: formType === "cyberpanel" ? (formSshUser.trim() || null) : null,
           sshPort: formType === "cyberpanel" && formSshPort ? Number(formSshPort) : null,
@@ -407,8 +412,11 @@ export default function SharedHostingSettings() {
                         </span>
                       )}
                     </div>
-                    {server.apiUrl && (
+                    {server.type === "plesk" && server.apiUrl && (
                       <p className="mt-0.5 text-xs text-slate-500">{server.apiUrl}</p>
+                    )}
+                    {server.type === "cyberpanel" && server.sshHost && (
+                      <p className="mt-0.5 text-xs text-slate-500">{server.sshHost}</p>
                     )}
                     {server.type === "cyberpanel" && server.sshKeyId && (
                       <p className="mt-0.5 font-mono text-xs text-slate-500">
@@ -669,6 +677,22 @@ export default function SharedHostingSettings() {
                       <span>Requires root or sudo-capable user with CyberPanel CLI access on the target server</span>
                     </div>
 
+                    {/* SSH Host */}
+                    <div>
+                      <label className="mb-1.5 block text-sm text-slate-400">
+                        SSH Host (IP or hostname)
+                        <span className="ml-1 text-neon-rose">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., 192.168.1.10 or panel.example.com"
+                        value={formSshHost}
+                        onChange={(e) => setFormSshHost(e.target.value)}
+                        className={inputClasses}
+                        autoComplete="off"
+                      />
+                    </div>
+
                     {/* SSH Key selector */}
                     <div>
                       <label className="mb-1.5 block text-sm text-slate-400">
@@ -721,8 +745,13 @@ export default function SharedHostingSettings() {
                       </div>
                     </div>
 
-                    {/* Validation callout */}
-                    {!formSshKeyId && (
+                    {/* Validation callouts */}
+                    {!formSshHost.trim() && (
+                      <div className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber">
+                        Enter the SSH host (IP or hostname) to enable CyberPanel sync
+                      </div>
+                    )}
+                    {formSshHost.trim() && !formSshKeyId && (
                       <div className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber">
                         Select an SSH key to enable CyberPanel sync
                       </div>
@@ -790,8 +819,14 @@ export default function SharedHostingSettings() {
                     </button>
                     <button
                       type="submit"
-                      disabled={saving || (formType === "cyberpanel" && !formSshKeyId)}
-                      title={formType === "cyberpanel" && !formSshKeyId ? "Select an SSH key to enable CyberPanel sync" : undefined}
+                      disabled={saving || (formType === "cyberpanel" && (!formSshHost.trim() || !formSshKeyId))}
+                      title={
+                        formType === "cyberpanel" && !formSshHost.trim()
+                          ? "Enter the SSH host (IP or hostname) to enable CyberPanel sync"
+                          : formType === "cyberpanel" && !formSshKeyId
+                          ? "Select an SSH key to enable CyberPanel sync"
+                          : undefined
+                      }
                       className={primaryBtnClasses}
                     >
                       {saving ? "Saving..." : modalMode === "create" ? "Create Server" : "Save Changes"}

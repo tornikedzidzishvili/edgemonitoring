@@ -176,6 +176,7 @@ export function startSharedHostingSyncScheduler(prisma: PrismaClient, env: Env):
         name: true,
         type: true,
         apiUrl: true,
+        sshHost: true,
         sshKeyId: true,
         sshUser: true,
         sshPort: true,
