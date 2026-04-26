@@ -1,0 +1,1 @@
+- [Downtime History Bug](project_downtime_history_bug.md) — P2: alert resolution collapses availability chart to 100%; fix is query-layer filter change, no schema work needed

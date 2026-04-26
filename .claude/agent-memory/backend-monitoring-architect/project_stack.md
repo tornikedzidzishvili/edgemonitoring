@@ -12,6 +12,8 @@ Node.js/Fastify 5 API in TypeScript. ESM modules (`"type": "module"`), `module: 
 Key dependencies: fastify 5, @fastify/cors, @fastify/sensible, prisma 6, zod, undici, ssh2, nodemailer.
 No fastify-plugin package — route modules are plain `async function(app: FastifyInstance)` registered via `app.register()`.
 
+Env vars are parsed and validated by `src/env.ts` using a Zod schema (see `getEnv()`). Current vars: PORT, DATABASE_URL, SSH_KEY_MASTER_SECRET, CHECK_INTERVAL_SECONDS, CHECK_TIMEOUT_MS, RP_ID, ORIGIN, PUBLIC_API_URL. Add new env vars to the schema there.
+
 Auth middleware lives at `src/middleware/sessionAuth.ts` — exports `requireAuth`, `requireAdmin`, `optionalAuth`.
 Legacy `requireAdmin` in `src/auth.ts` uses `x-admin-key` header — NOT used for user-session flows.
 

@@ -23,3 +23,7 @@ data/
 
 # Windows-reserved filename accidentally present in workspace
 NUL
+
+# MCP secrets — credentials live in env vars, not files
+# .mcp.json itself is committed (it just references env vars)
+.mcp.local.json

@@ -1,0 +1,2 @@
+- [API path prefix via nginx](reference_api_path_prefix.md) — public API is /api/*; nginx strips the prefix; bare /health returns the SPA index, not Fastify.
+- [Ops-only scope discipline](feedback_ops_scope_discipline.md) — during ops playbooks, halt and escalate on code regressions rather than fixing or proceeding.

@@ -1,0 +1,1 @@
+- [Registry Credentials Section](registry_credentials_section.md) — RegistryCredentialsSection component added to Settings; API types/methods for agent-install credentials

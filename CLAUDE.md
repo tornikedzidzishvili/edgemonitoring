@@ -2,6 +2,53 @@
 
 Internal server and web application monitoring platform for Edge.
 
+## Agent Team
+
+Every session in this project starts with **`tech-lead-monitor`** as the main agent (configured in `.claude/settings.json`). The tech lead receives every user request, triages it, decomposes it into domain-owned tasks, and delegates to specialist subagents via the `Agent` tool. Do not do specialist work yourself when a specialist owns it — delegate.
+
+Experimental agent teams are enabled via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, so `TeamCreate` / `SendMessage` / `TeamDelete` are available for cross-layer work that needs teammates to coordinate directly. For most tasks, one-shot subagent dispatches are cheaper and sufficient.
+
+### Team members (`.claude/agents/`)
+
+| Agent | Delegate when the change touches… |
+|---|---|
+| `scrum-master-edge-monitoring` | Sprint planning, story breakdown, prioritization, bug triage (P0–P3), backlog grooming, timeline tracking, status reports |
+| `backend-monitoring-architect` | `apps/api/src/**` — routes, auth, crypto, alerting, agent ingestion, schedulers, Plesk/SSH |
+| `db-monitoring-admin` | `apps/api/prisma/**`, `src/db.ts`, `src/dataRetention.ts` — schema, migrations, indexes, retention |
+| `noc-dashboard-frontend` | `apps/web/src/**` — pages, components, charts, Tailwind, dark mode |
+| `enterprise-devops-engineer` | `.github/workflows/**`, `Dockerfile*`, `docker-compose*.yml`, `scripts/**`, host/TLS config |
+
+### Routing contract
+
+- **Plan / prioritize / scope first** (non-trivial work): consult `scrum-master-edge-monitoring` *before* dispatching specialists. The scrum master produces stories with acceptance criteria, severity/priority, sizing, and dispatch order. The tech lead then dispatches specialists per that plan and owns Jira transitions.
+- **Cross-layer change** (e.g. new feature touching API + UI + schema): dispatch specialists **in parallel** in a single message, then synthesize.
+- **Single-layer change**: dispatch the one owning specialist directly.
+- **Verification / Playwright / curl checks**: the tech lead runs these itself after delegated work completes.
+- **Triage reads** (git status, small file reads to understand scope): the tech lead does these itself before delegating.
+- **Unclear ownership**: use `AskUserQuestion` rather than guessing.
+
+### Jira tracking (live status surface)
+
+The tech lead is responsible for keeping Jira in sync with reality so the user sees progress without delays.
+
+- **Project key**: `EMS`
+- **Workflow statuses**: `To Do` → `Selected for Development` → `In Progress` → `Code Review` → `Done`
+- **Bot account**: `nova@edge.ge` — the agent system's Scrum Master persona ("Nova"). All Jira writes (issue creation, comments, transitions) happen as Nova. Assignee defaults to Nova.
+- **Human contact**: `tornike@edge.ge` — only `@`-mention in a Jira comment when explicit human input/approval is required. Default communication channel is the Claude Code chat, not Jira comments.
+- **Transition contract** (tech lead owns these via Jira MCP):
+  - When the scrum master finalizes a story → ensure an EMS issue exists, status `Selected for Development`, sprint set, summary + acceptance criteria written.
+  - When the tech lead dispatches the work to a specialist → transition to `In Progress`, add a comment naming which specialist agent picked it up plus a 1-line plan.
+  - When the specialist returns work and the tech lead is verifying → transition to `Code Review`.
+  - After tech-lead verification passes → transition to `Done`.
+  - If a specialist reports a blocker → comment the blocker on the issue and notify the user in chat; keep status at `In Progress` until resolved.
+- **Bug severity** (set by scrum master): P0 / P1 / P2 / P3 — recorded in the issue summary or a labeled field. P0/P1 take priority over in-flight Selected for Development work.
+
+### Maintenance
+
+- Keep each specialist's `description` field sharp — auto-delegation depends on it. Use "USE PROACTIVELY" / "MUST BE USED" language and list concrete file paths.
+- `.claude/settings.json` pins the lead and enables the experimental flag — keep it checked into the repo so the team has the same orchestration setup.
+- User-level agents in `~/.claude/agents/` override project ones if names collide. Project scope is authoritative for this repo.
+
 ## Architecture
 
 Monorepo with npm workspaces. Three apps:
