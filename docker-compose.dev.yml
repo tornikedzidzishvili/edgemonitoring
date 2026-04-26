@@ -18,7 +18,9 @@ services:
       - /repo/apps/web/node_modules
       - /repo/apps/agent/node_modules
       - api_data:/data
-    command: sh -c "npm install && cd /repo/apps/api && npx prisma generate && npx prisma migrate deploy && npm run dev"
+    # Bootstrap: ensure /data/branding exists for logo/favicon uploads (EMS-6/EMS-12),
+    # then install deps, generate Prisma client, run migrations, and start the dev server.
+    command: sh -c "mkdir -p /data/branding && chown -R node:node /data/branding 2>/dev/null || true; npm install && cd /repo/apps/api && npx prisma generate && npx prisma migrate deploy && npm run dev"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4000/health"]

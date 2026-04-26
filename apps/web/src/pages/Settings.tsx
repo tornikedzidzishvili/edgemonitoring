@@ -8,8 +8,9 @@ import TemplatesSettings from "../components/settings/TemplatesSettings";
 import ServerAlertSettings from "../components/settings/ServerAlertSettings";
 import SharedHostingSettings from "../components/settings/SharedHostingSettings";
 import RegistryCredentialsSection from "../components/settings/RegistryCredentialsSection";
+import BrandingSettings from "../components/settings/BrandingSettings";
 
-type Tab = "users" | "smtp" | "sms" | "alerts" | "server-alerts" | "templates" | "shared-hosting" | "registry";
+type Tab = "users" | "smtp" | "sms" | "alerts" | "server-alerts" | "templates" | "shared-hosting" | "registry" | "branding";
 
 const tabs: { id: Tab; label: string; icon: JSX.Element }[] = [
   {
@@ -99,6 +100,18 @@ const tabs: { id: Tab; label: string; icon: JSX.Element }[] = [
         <line x1="12" y1="22.08" x2="12" y2="12" />
       </svg>
     )
+  },
+  {
+    id: "branding",
+    label: "Branding",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10" />
+        <path d="M14.5 15.5 10 10l-3 7 7-3z" />
+        <path d="M17 17h5" />
+        <path d="M19.5 14.5v5" />
+      </svg>
+    )
   }
 ];
 
@@ -158,6 +171,7 @@ export default function Settings() {
         {activeTab === "server-alerts" && <ServerAlertSettings />}
         {activeTab === "templates" && <TemplatesSettings />}
         {activeTab === "registry" && <RegistryCredentialsSection />}
+        {activeTab === "branding" && <BrandingSettings />}
       </motion.div>
     </motion.div>
   );

@@ -97,28 +97,6 @@ export async function settingsRoutes(app: FastifyInstance) {
     };
   });
 
-  // Test SMTP settings (admin only)
-  app.post("/settings/smtp/test", { preHandler: requireAdmin }, async (req, reply) => {
-    const body = z
-      .object({
-        testEmail: z.string().email()
-      })
-      .parse(req.body);
-
-    const settings = await prisma.smtpSettings.findFirst();
-    if (!settings) {
-      return reply.status(400).send({ error: "smtp-not-configured", message: "SMTP settings have not been configured" });
-    }
-
-    // For now, just return success - actual email sending would require nodemailer
-    // This is a placeholder for future implementation
-    return {
-      ok: true,
-      message: `Test email would be sent to ${body.testEmail}`,
-      note: "Email sending not yet implemented - SMTP settings saved successfully"
-    };
-  });
-
   // Delete SMTP settings (admin only)
   app.delete("/settings/smtp", { preHandler: requireAdmin }, async () => {
     const existing = await prisma.smtpSettings.findFirst();

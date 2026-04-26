@@ -2,8 +2,25 @@ import { request } from "undici";
 import type { PrismaClient } from "@prisma/client";
 import type { Env } from "./env.js";
 import { decryptString } from "./cryptoBox.js";
+import { getEnv } from "./env.js";
 import nodemailer from "nodemailer";
-import { webAppDownHtml, serverAlertHtml, testNotificationHtml } from "./emailTemplates.js";
+import { render } from "@react-email/render";
+import { WebAppDownEmail, ServerAlertEmail, TestNotificationEmail } from "./emailTemplates.js";
+
+type BrandingProps = { brandingLogoUrl?: string; platformName?: string };
+
+async function loadBrandingProps(prisma: PrismaClient): Promise<BrandingProps> {
+  const branding = await prisma.brandingSettings.findFirst();
+  if (!branding) return {};
+  const props: BrandingProps = {};
+  if (branding.platformName) props.platformName = branding.platformName;
+  if (branding.logoPath) {
+    const env = getEnv();
+    // Append updatedAt epoch to bust mail-client image caches after logo uploads
+    props.brandingLogoUrl = `${env.PUBLIC_API_URL}/branding/logo?t=${branding.updatedAt.getTime()}`;
+  }
+  return props;
+}
 
 type AlertVars = {
   name: string;
@@ -162,8 +179,8 @@ export async function sendWebAppDownAlerts(
   };
 
   const subject = renderTemplate(template.emailSubject, vars);
-  const emailBody = renderTemplate(template.emailBody, vars);
   const smsBody = renderTemplate(template.smsBody, vars);
+  const branding = await loadBrandingProps(prisma);
 
   await Promise.all(
     recipients.map(async (r) => {
@@ -171,8 +188,9 @@ export async function sendWebAppDownAlerts(
 
       if ((method === "email" || method === "both") && r.email) {
         try {
-          const html = webAppDownHtml(vars);
-          await sendEmail(prisma, env, r.email, subject, emailBody, html);
+          const html = await render(<WebAppDownEmail {...vars} {...branding} />);
+          const text = await render(<WebAppDownEmail {...vars} {...branding} />, { plainText: true });
+          await sendEmail(prisma, env, r.email, subject, text, html);
         } catch {
           // Non-fatal for scheduler
         }
@@ -208,7 +226,6 @@ export async function sendTestAlerts(
   };
 
   const subject = renderTemplate(template.emailSubject, vars);
-  const emailBody = renderTemplate(template.emailBody, vars);
   const smsBody = renderTemplate(template.smsBody, vars);
 
   const emailAttempted = !!params.email;
@@ -219,10 +236,13 @@ export async function sendTestAlerts(
     sms: { attempted: smsAttempted, sent: false as boolean, error: undefined as string | undefined }
   };
 
+  const branding = await loadBrandingProps(prisma);
+
   if (emailAttempted) {
     try {
-      const html = testNotificationHtml();
-      await sendEmail(prisma, env, params.email!, subject, emailBody, html);
+      const html = await render(<TestNotificationEmail {...branding} />);
+      const text = await render(<TestNotificationEmail {...branding} />, { plainText: true });
+      await sendEmail(prisma, env, params.email!, subject, text, html);
       result.email.sent = true;
     } catch (err) {
       result.email.error = err instanceof Error ? err.message : "email-send-failed";
@@ -295,11 +315,6 @@ export async function sendServerAlertNotification(
     vars
   );
 
-  const emailBody = renderServerAlertTemplate(
-    `Server Alert ${params.isRepeat ? "(Reminder)" : ""}\n\nServer: {{serverName}}\nAlert Type: {{alertType}}\nStatus: {{status}}\nThreshold: {{threshold}}\nActual: {{actualValue}}\nTime: {{time}}\n\nThis alert will repeat every 30 minutes until resolved.`,
-    vars
-  );
-
   const smsBody = renderServerAlertTemplate(
     params.isRepeat
       ? "REMINDER: {{serverName}} {{alertType}} alert still active. {{threshold}} threshold"
@@ -307,14 +322,17 @@ export async function sendServerAlertNotification(
     vars
   );
 
+  const branding = await loadBrandingProps(prisma);
+
   await Promise.all(
     recipients.map(async (r) => {
       const method = r.method;
 
       if ((method === "email" || method === "both") && r.email) {
         try {
-          const html = serverAlertHtml({ ...vars, isRepeat: params.isRepeat });
-          await sendEmail(prisma, env, r.email, subject, emailBody, html);
+          const html = await render(<ServerAlertEmail {...vars} isRepeat={params.isRepeat} {...branding} />);
+          const text = await render(<ServerAlertEmail {...vars} isRepeat={params.isRepeat} {...branding} />, { plainText: true });
+          await sendEmail(prisma, env, r.email, subject, text, html);
         } catch {
           // Non-fatal
         }

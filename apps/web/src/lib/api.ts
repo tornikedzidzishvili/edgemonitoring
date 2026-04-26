@@ -438,6 +438,16 @@ export type AgentInstallSettingsResponse = {
   registryUrl: string;
 };
 
+// Branding settings
+export type BrandingInfo = {
+  platformName: string;
+  hasLogo: boolean;
+  hasFavicon: boolean;
+  logoUrl: string | null;
+  faviconUrl: string | null;
+  updatedAt: string | null;
+};
+
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
 const TOKEN_KEY = "edge_monitoring_token";
@@ -759,5 +769,8 @@ export const api = {
     username?: string | null;
     token?: string | null;
     registryUrl?: string;
-  }) => apiPatch<AgentInstallSettingsResponse>(`/settings/agent-install`, params)
+  }) => apiPatch<AgentInstallSettingsResponse>(`/settings/agent-install`, params),
+
+  // Branding (public endpoint — no auth required)
+  brandingSettings: () => apiGet<BrandingInfo>(`/branding`)
 };

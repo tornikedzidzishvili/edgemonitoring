@@ -305,6 +305,20 @@ model AgentInstallSettings {
   updatedAt   DateTime @updatedAt
 }
 
+// Branding configuration (singleton — one row, created lazily on first write).
+// Stores file-system paths to uploaded logo and favicon assets; binary files
+// live on disk at /data/branding/. platformName drives the white-label display
+// name shown across the dashboard and PWA manifest.
+model BrandingSettings {
+  id           String   @id @default(cuid())
+  platformName String   @default("Edge Monitor")
+  logoPath     String?
+  logoMimeType String?
+  faviconPath  String?
+  faviconMime  String?
+  updatedAt    DateTime @updatedAt
+}
+
 // Global alerting threshold settings (singleton)
 model ServerAlertSettings {
   id                String   @id @default(cuid())

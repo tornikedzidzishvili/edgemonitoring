@@ -20,6 +20,8 @@ import { passkeyRoutes } from "./routes/passkeys.js";
 import { sharedHostingServerRoutes } from "./routes/sharedHostingServers.js";
 import { adminDbHealthRoutes } from "./routes/adminDbHealth.js";
 import { agentInstallSettingsRoutes } from "./routes/agentInstallSettings.js";
+import { brandingRoutes, ensureBrandingDir } from "./routes/branding.js";
+import { manifestRoutes } from "./routes/manifest.js";
 import { cleanExpiredSessions } from "./services/userAuth.js";
 import { startServerAlertScheduler } from "./serverAlertScheduler.js";
 import { seedDevAdmin } from "./seed.js";
@@ -47,6 +49,11 @@ await app.register(passkeyRoutes);
 await app.register(sharedHostingServerRoutes);
 await app.register(adminDbHealthRoutes);
 await app.register(agentInstallSettingsRoutes);
+await app.register(brandingRoutes);
+await app.register(manifestRoutes);
+
+// Defense-in-depth: ensure /data/branding exists and is writable at boot
+await ensureBrandingDir();
 
 // Clean expired sessions periodically (every hour)
 setInterval(() => {

@@ -3,9 +3,11 @@ import { motion } from "framer-motion";
 import { useAuth } from "../lib/auth";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { API_BASE_URL } from "../lib/api";
+import { useBranding } from "../hooks/useBranding";
 
 export default function Login() {
   const { login } = useAuth();
+  const { platformName, hasLogo, logoUrl } = useBranding();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [twoFactorToken, setTwoFactorToken] = useState("");
@@ -107,19 +109,27 @@ export default function Login() {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-              className="inline-flex h-16 w-16 items-center justify-center mb-4"
+              className="inline-flex items-center justify-center mb-4"
             >
-              <div className="relative flex h-14 w-14 items-center justify-center">
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-neon-cyan to-neon-emerald opacity-20 blur-sm" />
-                <div className="relative flex h-14 w-14 items-center justify-center rounded-xl border border-neon-cyan/30 bg-obsidian-800">
-                  <svg className="h-8 w-8 text-neon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                  </svg>
+              {hasLogo && logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={platformName}
+                  className="h-14 w-14 rounded-xl object-contain"
+                />
+              ) : (
+                <div className="relative flex h-14 w-14 items-center justify-center">
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-neon-cyan to-neon-emerald opacity-20 blur-sm" />
+                  <div className="relative flex h-14 w-14 items-center justify-center rounded-xl border border-neon-cyan/30 bg-obsidian-800">
+                    <svg className="h-8 w-8 text-neon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                    </svg>
+                  </div>
                 </div>
-              </div>
+              )}
             </motion.div>
             <h1 className="font-display text-2xl font-bold text-white">
-              Edge<span className="text-neon-cyan">Monitor</span>
+              {platformName}
             </h1>
             <p className="mt-2 text-sm text-slate-400">Sign in to your account</p>
           </div>

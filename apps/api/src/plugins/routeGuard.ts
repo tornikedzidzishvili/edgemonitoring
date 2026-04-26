@@ -109,6 +109,21 @@ function isPublicRoute(method: string, url: string): boolean {
   // Passkey authenticate endpoints must be public (used during login flow)
   if (path === "/passkeys/authenticate/options" || path === "/passkeys/authenticate/verify") return true;
 
+  // Public branding assets — the metadata endpoint and the image binaries are
+  // served without auth so that the login page, emails, and external dashboards
+  // can fetch them without a session cookie.
+  //
+  // EXACT-MATCH ONLY: "/branding" is listed as a strict equality check so that
+  // /branding/logo and /branding/favicon remain individually allowed without
+  // accidentally opening any future /branding/<something-else> path.
+  // /settings/branding/* is intentionally NOT listed here; it falls through
+  // to the isAuthenticatedRoute() check via the /settings/* prefix.
+  if (path === "/branding" || path === "/branding/logo" || path === "/branding/favicon") return true;
+
+  // PWA manifest — must be public so browsers and PWA install prompts can
+  // fetch it without a session cookie. Returns dynamic BrandingSettings data.
+  if (path === "/manifest.webmanifest") return true;
+
   return false;
 }
 

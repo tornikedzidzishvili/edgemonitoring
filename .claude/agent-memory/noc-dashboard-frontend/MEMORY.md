@@ -1,1 +1,2 @@
 - [Registry Credentials Section](registry_credentials_section.md) — RegistryCredentialsSection component added to Settings; API types/methods for agent-install credentials
+- [Branding Settings](branding_settings.md) — BrandingSettings tab (EMS-9); multipart upload pattern, per-section status state, cache-bust img src, no toast library

@@ -2,3 +2,4 @@
 - [SQLite WAL and performance pragmas](project_sqlite_pragmas.md) — WAL mode + busy_timeout + cache_size applied in db.ts at import time
 - [Schema audit findings — April 2026](project_schema_audit.md) — missing apiKeyHash index, WebApp cascade gap, N+1 patterns, unbounded Server query
 - [Prisma 7 migration config](project_prisma7_config.md) — prisma.config.ts required for migrate; datasource url removed from schema.prisma in Prisma 7
+- [BrandingSettings model — EMS-5](project_branding_settings.md) — singleton table for logo/favicon paths + platform name; permanent config, never in retention

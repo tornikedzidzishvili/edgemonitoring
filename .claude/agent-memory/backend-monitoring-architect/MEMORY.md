@@ -1,3 +1,5 @@
 - [Edge Monitoring API Stack](project_stack.md) — Fastify 5, ESM, TypeScript, Prisma 6, Zod; plugin pattern and auth middleware location
 - [Fastify cross-cutting plugins must use fp()](feedback_fastify_plugin_wrapping.md) — plain async plugins are encapsulated; auth guard and rate limiter require fp() to fire on all routes
 - [Server availability buckets must use offline alert history](feedback_availability_from_alerts.md) — report-presence alone collapses to 100% after alert resolution; use ServerAlert[type=offline] windows (all statuses) as the authoritative signal
+- [react-email setup in apps/api](project_react_email.md) — versions, render API (async), JSX config, branding props, EMS-7/8 boundary
+- [JSX in alerts pipeline — rename .ts to .tsx](feedback_tsx_in_ts_files.md) — files calling render(<Component />) must be .tsx; Bundler moduleResolution resolves .js imports to .tsx source

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "../lib/auth";
+import { useBranding } from "../hooks/useBranding";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: DashboardIcon },
@@ -63,6 +64,7 @@ function ProfileIcon({ className }: { className?: string }) {
 export default function Shell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { platformName, hasLogo, logoUrl } = useBranding();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -93,17 +95,31 @@ export default function Shell() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <div className="relative flex h-9 w-9 items-center justify-center">
-              <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-neon-cyan to-neon-emerald opacity-20" />
-              <div className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-neon-cyan/30 bg-obsidian-900">
-                <svg className="h-5 w-5 text-neon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                </svg>
+            {hasLogo && logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={platformName}
+                className="h-8 w-8 rounded-lg object-contain"
+              />
+            ) : (
+              <div className="relative flex h-9 w-9 items-center justify-center">
+                <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-neon-cyan to-neon-emerald opacity-20" />
+                <div className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-neon-cyan/30 bg-obsidian-900">
+                  <svg className="h-5 w-5 text-neon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                  </svg>
+                </div>
               </div>
-            </div>
+            )}
             <div className="hidden sm:block">
-              <span className="font-display font-semibold text-white">Edge</span>
-              <span className="font-display font-semibold text-neon-cyan">Monitor</span>
+              {hasLogo ? (
+                <span className="font-display font-semibold text-white">{platformName}</span>
+              ) : (
+                <>
+                  <span className="font-display font-semibold text-white">Edge</span>
+                  <span className="font-display font-semibold text-neon-cyan">Monitor</span>
+                </>
+              )}
             </div>
           </motion.div>
 

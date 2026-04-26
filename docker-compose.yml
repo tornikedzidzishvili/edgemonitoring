@@ -11,7 +11,13 @@ services:
       - SSH_KEY_MASTER_SECRET=dev-ssh-master-secret-change-me
       - CHECK_INTERVAL_SECONDS=60
       - CHECK_TIMEOUT_MS=10000
-    command: ["sh", "-lc", "cd /repo/apps/api; npx prisma migrate deploy --config prisma/prisma.config.ts || npx prisma db push --config prisma/prisma.config.ts; node /repo/apps/api/dist/index.js"]
+    # Bootstrap order on container start:
+    #  1. Ensure /data/branding exists (writable by API for logo/favicon uploads — EMS-6/EMS-12).
+    #     chown is best-effort: a no-op when the container runs as root (current state),
+    #     and prepares the dir for a future USER node hardening step.
+    #  2. Apply Prisma migrations (fall back to db push for first boot / drift).
+    #  3. Start the API.
+    command: ["sh", "-lc", "mkdir -p /data/branding && chown -R node:node /data/branding 2>/dev/null || true; cd /repo/apps/api; npx prisma migrate deploy --config prisma/prisma.config.ts || npx prisma db push --config prisma/prisma.config.ts; node /repo/apps/api/dist/index.js"]
     volumes:
       - api_data:/data
     restart: unless-stopped
