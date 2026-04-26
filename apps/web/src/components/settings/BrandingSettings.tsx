@@ -81,7 +81,7 @@ function emptyStatus(): AssetStatus {
 }
 
 async function fetchBranding(): Promise<BrandingInfo> {
-  const res = await fetch(`${API_BASE_URL}/api/settings/branding`, {
+  const res = await fetch(`${API_BASE_URL}/settings/branding`, {
     headers: authHeaders()
   });
   if (!res.ok) {
@@ -136,7 +136,7 @@ export default function BrandingSettings() {
     try {
       const fd = new FormData();
       fd.append("platformName", platformName.trim());
-      const res = await fetch(`${API_BASE_URL}/api/settings/branding`, {
+      const res = await fetch(`${API_BASE_URL}/settings/branding`, {
         method: "PUT",
         headers: authHeaders(),
         body: fd
@@ -170,7 +170,7 @@ export default function BrandingSettings() {
     try {
       const fd = new FormData();
       fd.append("logo", logoFile);
-      const res = await fetch(`${API_BASE_URL}/api/settings/branding`, {
+      const res = await fetch(`${API_BASE_URL}/settings/branding`, {
         method: "PUT",
         headers: authHeaders(),
         body: fd
@@ -192,7 +192,7 @@ export default function BrandingSettings() {
   const handleRemoveLogo = async () => {
     setLogoStatus({ ...emptyStatus(), loading: true });
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings/branding/logo`, {
+      const res = await fetch(`${API_BASE_URL}/settings/branding/logo`, {
         method: "DELETE",
         headers: authHeaders()
       });
@@ -224,7 +224,7 @@ export default function BrandingSettings() {
     try {
       const fd = new FormData();
       fd.append("favicon", faviconFile);
-      const res = await fetch(`${API_BASE_URL}/api/settings/branding`, {
+      const res = await fetch(`${API_BASE_URL}/settings/branding`, {
         method: "PUT",
         headers: authHeaders(),
         body: fd
@@ -246,7 +246,7 @@ export default function BrandingSettings() {
   const handleRemoveFavicon = async () => {
     setFaviconStatus({ ...emptyStatus(), loading: true });
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings/branding/favicon`, {
+      const res = await fetch(`${API_BASE_URL}/settings/branding/favicon`, {
         method: "DELETE",
         headers: authHeaders()
       });
@@ -380,7 +380,7 @@ export default function BrandingSettings() {
             style={{ width: 160, minHeight: 96 }}>
             {branding?.hasLogo && branding.logoUrl ? (
               <img
-                src={`${API_BASE_URL}${branding.logoUrl}${cacheBust}`}
+                src={`${branding.logoUrl}${cacheBust}`}
                 alt="Platform logo"
                 className="max-h-16 max-w-full rounded object-contain"
               />
@@ -498,7 +498,7 @@ export default function BrandingSettings() {
           >
             {branding?.hasFavicon && branding.faviconUrl ? (
               <img
-                src={`${API_BASE_URL}${branding.faviconUrl}${cacheBust}`}
+                src={`${branding.faviconUrl}${cacheBust}`}
                 alt="Favicon"
                 className="h-10 w-10 rounded object-contain"
               />
