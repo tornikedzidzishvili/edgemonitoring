@@ -207,26 +207,73 @@ export async function sendWebAppDownAlerts(
   );
 }
 
+type TestAlertKind = "generic" | "resource" | "connection";
+
+function serverAlertSampleVars(): ServerAlertVars {
+  return {
+    serverName: "demo-server-01",
+    alertType: "CPU",
+    threshold: "90%",
+    actualValue: "95%",
+    time: formatUtcMinute(new Date()),
+    status: "TRIGGERED"
+  };
+}
+
+function webAppDownSampleVars(): AlertVars {
+  return {
+    name: "demo.example.com",
+    url: "https://demo.example.com",
+    time: formatUtcMinute(new Date()),
+    httpStatus: "503",
+    error: "connection refused"
+  };
+}
+
 export async function sendTestAlerts(
   prisma: PrismaClient,
   env: Env,
-  params: { email?: string | null; phone?: string | null }
+  params: { email?: string | null; phone?: string | null; kind?: TestAlertKind }
 ): Promise<{
   email: { attempted: boolean; sent: boolean; error?: string };
   sms: { attempted: boolean; sent: boolean; error?: string };
 }> {
+  const kind: TestAlertKind = params.kind ?? "generic";
   const template = await getOrCreateAlertTemplate(prisma);
+  const branding = await loadBrandingProps(prisma);
 
-  const vars: AlertVars = {
-    name: "TEST",
-    url: "-",
-    time: formatUtcMinute(new Date()),
-    httpStatus: "-",
-    error: "test"
-  };
+  // Build per-kind subject, html, text, smsBody
+  let subject: string;
+  let html: string;
+  let text: string;
+  let smsBody: string;
 
-  const subject = renderTemplate(template.emailSubject, vars);
-  const smsBody = renderTemplate(template.smsBody, vars);
+  if (kind === "resource") {
+    const vars = serverAlertSampleVars();
+    subject = `Alert: ${vars.serverName} - ${vars.alertType} ${vars.status}`;
+    html = await render(<ServerAlertEmail {...vars} isRepeat={false} {...branding} />);
+    text = await render(<ServerAlertEmail {...vars} isRepeat={false} {...branding} />, { plainText: true });
+    smsBody = `ALERT: ${vars.serverName} ${vars.alertType} ${vars.status}. Threshold: ${vars.threshold}, Actual: ${vars.actualValue}`;
+  } else if (kind === "connection") {
+    const vars = webAppDownSampleVars();
+    subject = renderTemplate(template.emailSubject, vars);
+    html = await render(<WebAppDownEmail {...vars} {...branding} />);
+    text = await render(<WebAppDownEmail {...vars} {...branding} />, { plainText: true });
+    smsBody = renderTemplate(template.smsBody, vars);
+  } else {
+    // "generic" — preserve existing behavior exactly
+    const vars: AlertVars = {
+      name: "TEST",
+      url: "-",
+      time: formatUtcMinute(new Date()),
+      httpStatus: "-",
+      error: "test"
+    };
+    subject = renderTemplate(template.emailSubject, vars);
+    html = await render(<TestNotificationEmail {...branding} />);
+    text = await render(<TestNotificationEmail {...branding} />, { plainText: true });
+    smsBody = renderTemplate(template.smsBody, vars);
+  }
 
   const emailAttempted = !!params.email;
   const smsAttempted = !!params.phone;
@@ -236,12 +283,8 @@ export async function sendTestAlerts(
     sms: { attempted: smsAttempted, sent: false as boolean, error: undefined as string | undefined }
   };
 
-  const branding = await loadBrandingProps(prisma);
-
   if (emailAttempted) {
     try {
-      const html = await render(<TestNotificationEmail {...branding} />);
-      const text = await render(<TestNotificationEmail {...branding} />, { plainText: true });
       await sendEmail(prisma, env, params.email!, subject, text, html);
       result.email.sent = true;
     } catch (err) {

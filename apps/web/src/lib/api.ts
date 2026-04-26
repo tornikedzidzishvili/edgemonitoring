@@ -644,7 +644,7 @@ export const api = {
   alertRecipients: () => apiGet<AlertRecipientsResponse>(`/settings/alerts/recipients`),
   saveAlertRecipient: (params: { userId: string; email?: string | null; phone?: string | null; method: "none" | "email" | "sms" | "both" }) =>
     apiPost<{ recipient: AlertRecipientInfo }>(`/settings/alerts/recipients`, params),
-  testAlerts: (params: { email?: string | null; phone?: string | null }) =>
+  testAlerts: (params: { email?: string | null; phone?: string | null; kind?: "generic" | "resource" | "connection" }) =>
     apiPost<TestAlertsResponse>(`/settings/alerts/test`, params),
   alertTemplates: () => apiGet<AlertTemplatesResponse>(`/settings/templates/alerts`),
   saveAlertTemplates: (params: { emailSubject: string; emailBody: string; smsBody: string }) =>

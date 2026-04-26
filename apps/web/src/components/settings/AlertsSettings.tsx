@@ -23,7 +23,7 @@ export default function AlertsSettings() {
   const [recipients, setRecipients] = useState<AlertRecipientInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
+  const [testingKind, setTestingKind] = useState<"generic" | "resource" | "connection" | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -108,7 +108,13 @@ export default function AlertsSettings() {
     }
   };
 
-  const handleTest = async () => {
+  const kindLabel: Record<"generic" | "resource" | "connection", string> = {
+    generic: "Generic",
+    resource: "Resource alert",
+    connection: "Connection alert",
+  };
+
+  const handleTest = async (kind: "generic" | "resource" | "connection" = "generic") => {
     setError("");
     setSuccess("");
 
@@ -119,11 +125,12 @@ export default function AlertsSettings() {
       return;
     }
 
-    setTesting(true);
+    setTestingKind(kind);
     try {
       const res = await api.testAlerts({
         email: hasEmail ? email : null,
-        phone: hasPhone ? phone : null
+        phone: hasPhone ? phone : null,
+        kind,
       });
 
       const e = res.result.email;
@@ -132,11 +139,11 @@ export default function AlertsSettings() {
       const parts: string[] = [];
       if (e.attempted) parts.push(`Email: ${e.sent ? "sent" : e.error ? `failed (${e.error})` : "failed"}`);
       if (s.attempted) parts.push(`SMS: ${s.sent ? "sent" : s.error ? `failed (${s.error})` : "failed"}`);
-      setSuccess(parts.length ? `Test notifications: ${parts.join(" | ")}` : "Test completed");
+      setSuccess(parts.length ? `${kindLabel[kind]} test: ${parts.join(" | ")}` : `${kindLabel[kind]} test completed`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send test notifications");
     } finally {
-      setTesting(false);
+      setTestingKind(null);
     }
   };
 
@@ -243,20 +250,36 @@ export default function AlertsSettings() {
           </select>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <button type="button" onClick={handleTest} disabled={testing} className={secondaryBtnClasses}>
-            {testing ? (
-              <span className="flex items-center gap-2">
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Sending...
-              </span>
-            ) : (
-              "Send Test"
-            )}
-          </button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
+          {(
+            [
+              { kind: "generic", label: "Send Test", ariaLabel: "Send a generic test email to verify SMTP configuration" },
+              { kind: "resource", label: "Test Resource Alert", ariaLabel: "Send a sample server resource alert (CPU/RAM/offline) email" },
+              { kind: "connection", label: "Test Connection Alert", ariaLabel: "Send a sample web-app-down alert email" },
+            ] as const
+          ).map(({ kind, label, ariaLabel }) => (
+            <button
+              key={kind}
+              type="button"
+              onClick={() => handleTest(kind)}
+              disabled={testingKind !== null}
+              aria-label={ariaLabel}
+              title={ariaLabel}
+              className={secondaryBtnClasses}
+            >
+              {testingKind === kind ? (
+                <span className="flex items-center gap-2">
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Sending...
+                </span>
+              ) : (
+                label
+              )}
+            </button>
+          ))}
           <button type="submit" disabled={saving} className={primaryBtnClasses}>
             {saving ? (
               <span className="flex items-center gap-2">

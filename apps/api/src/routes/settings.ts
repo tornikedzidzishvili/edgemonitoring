@@ -312,7 +312,8 @@ export async function settingsRoutes(app: FastifyInstance) {
     const body = z
       .object({
         email: z.string().email().nullable().optional(),
-        phone: z.string().min(3).nullable().optional()
+        phone: z.string().min(3).nullable().optional(),
+        kind: z.enum(["generic", "resource", "connection"]).optional()
       })
       .parse(req.body);
 
@@ -323,7 +324,7 @@ export async function settingsRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "missing-destination", message: "Provide email and/or phone" });
     }
 
-    const result = await sendTestAlerts(prisma, env, { email, phone });
+    const result = await sendTestAlerts(prisma, env, { email, phone, kind: body.kind });
     return { ok: true, result };
   });
 }
