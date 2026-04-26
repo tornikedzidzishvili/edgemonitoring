@@ -34,6 +34,9 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
         apiUrl: s.apiUrl,
         hasApiKey: !!(s.apiKeyEnc),
         hasCredentials: !!(s.usernameEnc && s.passwordEnc),
+        sshKeyId: s.sshKeyId,
+        sshUser: s.sshUser,
+        sshPort: s.sshPort,
         syncAll: s.syncAll,
         lastSyncAt: s.lastSyncAt,
         lastSyncError: s.lastSyncError,
@@ -76,6 +79,9 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
         apiUrl: server.apiUrl,
         hasApiKey: !!(server.apiKeyEnc),
         hasCredentials: !!(server.usernameEnc && server.passwordEnc),
+        sshKeyId: server.sshKeyId,
+        sshUser: server.sshUser,
+        sshPort: server.sshPort,
         syncAll: server.syncAll,
         lastSyncAt: server.lastSyncAt,
         lastSyncError: server.lastSyncError,
@@ -95,27 +101,74 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
   });
 
   // Create shared hosting server (admin only)
-  app.post("/settings/shared-hosting/servers", { preHandler: requireAdmin }, async (req) => {
+  app.post("/settings/shared-hosting/servers", { preHandler: requireAdmin }, async (req, reply) => {
     const body = z
       .object({
         name: z.string().min(1),
-        type: z.enum(["plesk", "manual"]).default("plesk"),
+        type: z.enum(["plesk", "manual", "cyberpanel"]).default("plesk"),
         apiUrl: z.string().min(1).optional(), // Will be normalized by plesk service
         apiKey: z.string().min(1).optional(),
         username: z.string().min(1).optional(),
         password: z.string().min(1).optional(),
+        // SSH fields — valid for all types; required when type is "cyberpanel"
+        sshKeyId: z.string().min(1).nullable().optional(),
+        sshUser: z.string().min(1).optional(),
+        sshPort: z.number().int().min(1).max(65535).optional(),
         syncAll: z.boolean().default(true),
         enabled: z.boolean().default(true)
       })
       .parse(req.body);
 
-    const data: any = {
+    // EMS-24: CyberPanel requires a valid SSH key reference. Validate here so
+    // the caller gets HTTP 400 (not 500) on any FK or missing-field problem.
+    if (body.type === "cyberpanel") {
+      if (!body.sshKeyId) {
+        return reply.status(400).send({
+          error: "sshKeyId is required and must reference an existing SSH key when type is 'cyberpanel'"
+        });
+      }
+      const keyExists = await prisma.sshKey.findUnique({ where: { id: body.sshKeyId }, select: { id: true } });
+      if (!keyExists) {
+        return reply.status(400).send({
+          error: "sshKeyId is required and must reference an existing SSH key when type is 'cyberpanel'"
+        });
+      }
+      // Apply defaults for optional SSH fields when type is cyberpanel
+      if (body.sshUser === undefined) body.sshUser = "root";
+      if (body.sshPort === undefined) body.sshPort = 22;
+    }
+
+    const data: {
+      name: string;
+      type: string;
+      apiUrl: string | null;
+      syncAll: boolean;
+      enabled: boolean;
+      sshKeyId?: string | null;
+      sshUser?: string;
+      sshPort?: number;
+      apiKeyEnc?: string;
+      apiKeyIv?: string;
+      apiKeyTag?: string;
+      usernameEnc?: string;
+      usernameIv?: string;
+      usernameTag?: string;
+      passwordEnc?: string;
+      passwordIv?: string;
+      passwordTag?: string;
+    } = {
       name: body.name,
       type: body.type,
       apiUrl: body.apiUrl ?? null,
       syncAll: body.syncAll,
       enabled: body.enabled
     };
+
+    // Write SSH fields when provided (accepted for all types; required path
+    // for cyberpanel already validated above)
+    if (body.sshKeyId !== undefined) data.sshKeyId = body.sshKeyId;
+    if (body.sshUser !== undefined) data.sshUser = body.sshUser;
+    if (body.sshPort !== undefined) data.sshPort = body.sshPort;
 
     // Encrypt API key if provided
     if (body.apiKey) {
@@ -151,6 +204,9 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
         apiUrl: server.apiUrl,
         hasApiKey: !!(server.apiKeyEnc),
         hasCredentials: !!(server.usernameEnc && server.passwordEnc),
+        sshKeyId: server.sshKeyId,
+        sshUser: server.sshUser,
+        sshPort: server.sshPort,
         syncAll: server.syncAll,
         enabled: server.enabled,
         createdAt: server.createdAt
@@ -159,16 +215,20 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
   });
 
   // Update shared hosting server (admin only)
-  app.patch("/settings/shared-hosting/servers/:id", { preHandler: requireAdmin }, async (req) => {
+  app.patch("/settings/shared-hosting/servers/:id", { preHandler: requireAdmin }, async (req, reply) => {
     const params = z.object({ id: z.string().min(1) }).parse(req.params);
     const body = z
       .object({
         name: z.string().min(1).optional(),
-        type: z.enum(["plesk", "manual"]).optional(),
+        type: z.enum(["plesk", "manual", "cyberpanel"]).optional(),
         apiUrl: z.string().min(1).nullable().optional(), // Will be normalized by plesk service
         apiKey: z.string().min(1).nullable().optional(),
         username: z.string().min(1).nullable().optional(),
         password: z.string().min(1).nullable().optional(),
+        // SSH fields — valid for all types; required when resolved type is "cyberpanel"
+        sshKeyId: z.string().min(1).nullable().optional(),
+        sshUser: z.string().min(1).optional(),
+        sshPort: z.number().int().min(1).max(65535).optional(),
         syncAll: z.boolean().optional(),
         enabled: z.boolean().optional()
       })
@@ -177,13 +237,65 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
     const existing = await prisma.sharedHostingServer.findUnique({ where: { id: params.id } });
     if (!existing) throw app.httpErrors.notFound("server-not-found");
 
-    const data: any = {};
+    // EMS-24: resolve the effective type — body wins, fall back to stored value.
+    // This lets us validate cyberpanel requirements even when only fields other
+    // than `type` are being changed on an already-cyberpanel server.
+    const resolvedType = body.type ?? existing.type;
+
+    if (resolvedType === "cyberpanel") {
+      // Resolve the effective sshKeyId: body wins, fall back to stored value.
+      const resolvedSshKeyId = body.sshKeyId !== undefined ? body.sshKeyId : existing.sshKeyId;
+
+      if (!resolvedSshKeyId) {
+        return reply.status(400).send({
+          error: "sshKeyId is required and must reference an existing SSH key when type is 'cyberpanel'"
+        });
+      }
+      const keyExists = await prisma.sshKey.findUnique({ where: { id: resolvedSshKeyId }, select: { id: true } });
+      if (!keyExists) {
+        return reply.status(400).send({
+          error: "sshKeyId is required and must reference an existing SSH key when type is 'cyberpanel'"
+        });
+      }
+    }
+
+    const data: {
+      name?: string;
+      type?: string;
+      apiUrl?: string | null;
+      syncAll?: boolean;
+      enabled?: boolean;
+      sshKeyId?: string | null;
+      sshUser?: string;
+      sshPort?: number;
+      apiKeyEnc?: string | null;
+      apiKeyIv?: string | null;
+      apiKeyTag?: string | null;
+      usernameEnc?: string | null;
+      usernameIv?: string | null;
+      usernameTag?: string | null;
+      passwordEnc?: string | null;
+      passwordIv?: string | null;
+      passwordTag?: string | null;
+    } = {};
 
     if (body.name !== undefined) data.name = body.name;
     if (body.type !== undefined) data.type = body.type;
     if (body.apiUrl !== undefined) data.apiUrl = body.apiUrl;
     if (body.syncAll !== undefined) data.syncAll = body.syncAll;
     if (body.enabled !== undefined) data.enabled = body.enabled;
+
+    // SSH fields: write whatever was explicitly sent (null clears, string sets)
+    if (body.sshKeyId !== undefined) data.sshKeyId = body.sshKeyId;
+    if (body.sshUser !== undefined) data.sshUser = body.sshUser;
+    if (body.sshPort !== undefined) data.sshPort = body.sshPort;
+
+    // When switching TO cyberpanel and the caller hasn't supplied sshUser/sshPort,
+    // apply defaults only if the stored values are also absent.
+    if (body.type === "cyberpanel") {
+      if (data.sshUser === undefined && !existing.sshUser) data.sshUser = "root";
+      if (data.sshPort === undefined && !existing.sshPort) data.sshPort = 22;
+    }
 
     // Handle API key
     if (body.apiKey === null) {
@@ -234,6 +346,9 @@ export async function sharedHostingServerRoutes(app: FastifyInstance) {
         apiUrl: server.apiUrl,
         hasApiKey: !!(server.apiKeyEnc),
         hasCredentials: !!(server.usernameEnc && server.passwordEnc),
+        sshKeyId: server.sshKeyId,
+        sshUser: server.sshUser,
+        sshPort: server.sshPort,
         syncAll: server.syncAll,
         enabled: server.enabled,
         updatedAt: server.updatedAt

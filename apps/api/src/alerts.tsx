@@ -5,7 +5,7 @@ import { decryptString } from "./cryptoBox.js";
 import { getEnv } from "./env.js";
 import nodemailer from "nodemailer";
 import { render } from "@react-email/render";
-import { WebAppDownEmail, ServerAlertEmail, TestNotificationEmail } from "./emailTemplates.js";
+import { WebAppDownEmail, ServerAlertEmail, TestNotificationEmail, SharedHostingAlertEmail } from "./emailTemplates.js";
 
 type BrandingProps = { brandingLogoUrl?: string; platformName?: string };
 
@@ -333,6 +333,90 @@ export async function sendServerAlertNotification(
           const html = await render(<ServerAlertEmail {...vars} isRepeat={params.isRepeat} {...branding} />);
           const text = await render(<ServerAlertEmail {...vars} isRepeat={params.isRepeat} {...branding} />, { plainText: true });
           await sendEmail(prisma, env, r.email, subject, text, html);
+        } catch {
+          // Non-fatal
+        }
+      }
+
+      if ((method === "sms" || method === "both") && r.phone) {
+        try {
+          await sendSms(prisma, env, r.phone, smsBody);
+        } catch {
+          // Non-fatal
+        }
+      }
+    })
+  );
+}
+
+/**
+ * Dispatch email + SMS notifications for a CyberPanel service alert fire or
+ * resolution.
+ *
+ * Called by the CyberPanel alert evaluator after transitioning a
+ * SharedHostingAlert row from "pending" → "active" (fire) or
+ * "active" → "resolved" (resolve). One notification per state change — the
+ * evaluator does NOT call this on every sync cycle once already active.
+ *
+ * Message texts:
+ *   fire:    "ALERT: CyberPanel service <name> inactive on <server>"
+ *   resolve: "RESOLVED: CyberPanel service <name> recovered on <server>"
+ */
+export async function sendSharedHostingAlertNotification(
+  prisma: PrismaClient,
+  env: Env,
+  params: {
+    serverName: string;
+    serviceName: string;
+    alertStatus: "active" | "resolved";
+  }
+): Promise<void> {
+  const recipients = await prisma.alertRecipient.findMany({
+    where: { method: { not: "none" } },
+    include: { user: true }
+  });
+
+  if (recipients.length === 0) return;
+
+  const time = formatUtcMinute(new Date());
+  const isResolved = params.alertStatus === "resolved";
+
+  const emailSubject = isResolved
+    ? `RESOLVED: CyberPanel service ${params.serviceName} recovered on ${params.serverName}`
+    : `ALERT: CyberPanel service ${params.serviceName} inactive on ${params.serverName}`;
+
+  const smsBody = isResolved
+    ? `RESOLVED: CyberPanel service ${params.serviceName} recovered on ${params.serverName}`
+    : `ALERT: CyberPanel service ${params.serviceName} inactive on ${params.serverName}`;
+
+  const branding = await loadBrandingProps(prisma);
+
+  await Promise.all(
+    recipients.map(async (r) => {
+      const method = r.method;
+
+      if ((method === "email" || method === "both") && r.email) {
+        try {
+          const html = await render(
+            <SharedHostingAlertEmail
+              serverName={params.serverName}
+              serviceName={params.serviceName}
+              alertStatus={params.alertStatus}
+              time={time}
+              {...branding}
+            />
+          );
+          const text = await render(
+            <SharedHostingAlertEmail
+              serverName={params.serverName}
+              serviceName={params.serviceName}
+              alertStatus={params.alertStatus}
+              time={time}
+              {...branding}
+            />,
+            { plainText: true }
+          );
+          await sendEmail(prisma, env, r.email, emailSubject, text, html);
         } catch {
           // Non-fatal
         }

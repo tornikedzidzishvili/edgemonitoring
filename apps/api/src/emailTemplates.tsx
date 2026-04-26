@@ -515,6 +515,63 @@ export function ServerAlertEmail({
   );
 }
 
+export interface SharedHostingAlertEmailProps extends BrandingProps {
+  serverName: string;
+  serviceName: string;
+  /** "active" = service went down; "resolved" = service recovered */
+  alertStatus: "active" | "resolved";
+  time: string;
+}
+
+export function SharedHostingAlertEmail({
+  serverName,
+  serviceName,
+  alertStatus,
+  time,
+  brandingLogoUrl,
+  platformName,
+}: SharedHostingAlertEmailProps) {
+  const isResolved = alertStatus === "resolved";
+  const severity: Severity = isResolved ? "success" : "critical";
+
+  return (
+    <EmailShell
+      severity={severity}
+      headline={
+        isResolved
+          ? `CyberPanel service ${serviceName} recovered`
+          : `CyberPanel service ${serviceName} is inactive`
+      }
+      subtitle={
+        isResolved
+          ? `The ${serviceName} service on ${serverName} has returned to active status.`
+          : `The ${serviceName} service on ${serverName} has been inactive for 2 consecutive sync cycles.`
+      }
+      rows={[
+        { label: "Server", value: serverName },
+        { label: "Service", value: serviceName, mono: true },
+        {
+          label: "Status",
+          value: (
+            <StatusBadge
+              text={isResolved ? "RESOLVED" : "INACTIVE"}
+              color={isResolved ? C.emerald : C.rose}
+            />
+          ),
+        },
+        { label: isResolved ? "Resolved At" : "Detected At", value: time },
+      ]}
+      footer={
+        isResolved
+          ? "The service has recovered. No further action is required."
+          : "This alert fires after 2 consecutive sync cycles of inactivity to avoid false positives from brief restarts."
+      }
+      brandingLogoUrl={brandingLogoUrl}
+      platformName={platformName}
+    />
+  );
+}
+
 export interface TestNotificationEmailProps extends BrandingProps {}
 
 export function TestNotificationEmail({

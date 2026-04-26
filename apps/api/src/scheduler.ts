@@ -3,6 +3,9 @@ import type { Env } from "./env.js";
 import { checkUrl } from "./uptimeChecker.js";
 import { checkDomainHttp, checkDomainDns, checkSslCertificate } from "./domainChecker.js";
 import { sendWebAppDownAlerts } from "./alerts.js";
+import { syncCyberPanel } from "./services/cyberpanelSync.js";
+import { evaluateCyberPanelAlerts } from "./services/cyberpanelAlertEvaluator.js";
+import { syncPleskDomains } from "./services/plesk.js";
 
 export function startUptimeScheduler(prisma: PrismaClient, env: Env): void {
   const intervalMs = env.CHECK_INTERVAL_SECONDS * 1000;
@@ -135,6 +138,102 @@ export function startDomainScheduler(prisma: PrismaClient, env: Env): void {
   setInterval(() => {
     runOnce().catch(() => {
       // ignore
+    });
+  }, intervalMs).unref();
+}
+
+// ---------------------------------------------------------------------------
+// Shared-hosting sync scheduler (Plesk + CyberPanel)
+// ---------------------------------------------------------------------------
+
+/**
+ * Periodically iterates over all enabled SharedHostingServer rows and runs
+ * the appropriate sync function based on `server.type`:
+ *
+ *   "plesk"      → syncPleskDomains (existing HTTP path — unchanged)
+ *   "manual"     → syncPleskDomains (same Plesk HTTP path — unchanged)
+ *   "cyberpanel" → syncCyberPanel   (new SSH path — EMS-23)
+ *
+ * Errors on any individual server are caught and recorded via `lastSyncError`
+ * inside the respective sync function; the loop always continues. The two
+ * paths are fully independent — a hanging CyberPanel server cannot delay
+ * the Plesk path or vice versa (servers are iterated via Promise.all).
+ *
+ * Sync interval: once per hour (configurable via SHARED_HOSTING_SYNC_INTERVAL_MS
+ * env var for testing).
+ */
+export function startSharedHostingSyncScheduler(prisma: PrismaClient, env: Env): void {
+  const intervalMs =
+    typeof process.env.SHARED_HOSTING_SYNC_INTERVAL_MS === "string"
+      ? parseInt(process.env.SHARED_HOSTING_SYNC_INTERVAL_MS, 10) || 3_600_000
+      : 3_600_000; // Default: 1 hour
+
+  const runOnce = async (): Promise<void> => {
+    const servers = await prisma.sharedHostingServer.findMany({
+      where: { enabled: true },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        apiUrl: true,
+        sshKeyId: true,
+        sshUser: true,
+        sshPort: true,
+        sshKey: {
+          select: {
+            privateKeyEnc: true,
+            privateKeyIv: true,
+            privateKeyTag: true,
+            passphraseEnc: true,
+            passphraseIv: true,
+            passphraseTag: true,
+          },
+        },
+      },
+    });
+
+    await Promise.all(
+      servers.map(async (server) => {
+        try {
+          if (server.type === "cyberpanel") {
+            // New SSH-based sync path (EMS-23).
+            await syncCyberPanel(prisma, env, server);
+            // EMS-27: evaluate service alerts immediately after a successful
+            // sync. syncCyberPanel records errors internally and does not throw
+            // on failure, so reaching this line means the sync completed (even
+            // if it wrote a lastSyncError — we still evaluate because the
+            // serviceStatus blob may be fresh from a prior successful sync).
+            await evaluateCyberPanelAlerts(prisma, env, server.id, server.name);
+          } else {
+            // "plesk" and "manual" share the existing HTTP sync path.
+            // syncPleskDomains handles its own error recording internally; we
+            // still wrap it so an unexpected throw cannot crash the loop.
+            await syncPleskDomains(server.id);
+          }
+        } catch (err) {
+          // Last-resort catch: syncCyberPanel and syncPleskDomains already
+          // record errors internally, but guard the loop in case of an
+          // unexpected outer throw (e.g. Prisma connectivity loss on the
+          // lastSyncError update itself).
+          const safeMessage =
+            err instanceof Error ? err.message.slice(0, 200) : "unknown-error";
+          console.error(
+            `[shared-hosting-sync] unhandled serverId=${server.id} error="${safeMessage}"`
+          );
+        }
+      })
+    );
+  };
+
+  // Fire immediately on startup, then on each interval tick.
+  runOnce().catch(() => {
+    // Top-level catch: prevent unhandled rejection if the very first run
+    // fails (e.g., DB not yet ready at startup).
+  });
+
+  setInterval(() => {
+    runOnce().catch(() => {
+      // ignore — per-server errors are already handled inside runOnce
     });
   }, intervalMs).unref();
 }

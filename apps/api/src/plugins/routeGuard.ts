@@ -45,6 +45,9 @@ function isAdminRoute(method: string, url: string): boolean {
   // Normalise away query strings so matching is against the path only
   const path = stripQuery(url);
 
+  // EMS-17: confirmed admin classification for monitoringMode + sshKeyId surface
+  // EMS-18: confirmed admin classification for SSH test endpoint
+  // EMS-24: confirmed admin classification for SharedHostingServer CyberPanel CRUD surface
   return path === "/admin" || path.startsWith("/admin/");
 }
 

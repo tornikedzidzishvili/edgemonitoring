@@ -1,8 +1,315 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { api, type SharedHostingDetail, type SslStatus } from "../lib/api";
+import { api, type SharedHostingDetail, type SharedHostingDomainInfo, type SslStatus } from "../lib/api";
 import { formatDateTime } from "../lib/format";
+
+// ---------------------------------------------------------------------------
+// CyberPanel service-status type guard
+// ---------------------------------------------------------------------------
+
+interface CyberPanelServiceStatus {
+  lscpd: "active" | "inactive";
+  lsws: "active" | "inactive";
+  mariadb: "active" | "inactive";
+}
+
+function parseCyberPanelServiceStatus(raw: string | null): CyberPanelServiceStatus | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      "lscpd" in parsed &&
+      "lsws" in parsed &&
+      "mariadb" in parsed
+    ) {
+      const p = parsed as Record<string, unknown>;
+      return {
+        lscpd: p.lscpd === "active" ? "active" : "inactive",
+        lsws: p.lsws === "active" ? "active" : "inactive",
+        mariadb: p.mariadb === "active" ? "active" : "inactive",
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Relative-time helper (no external deps)
+// ---------------------------------------------------------------------------
+
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return "never";
+  const diffMs = Date.now() - new Date(iso).getTime();
+  if (diffMs < 0) return "just now";
+  const secs = Math.floor(diffMs / 1000);
+  if (secs < 60) return `${secs} second${secs !== 1 ? "s" : ""} ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins} minute${mins !== 1 ? "s" : ""} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs !== 1 ? "s" : ""} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days !== 1 ? "s" : ""} ago`;
+}
+
+// ---------------------------------------------------------------------------
+// SSL expiry badge for CyberPanel table (days-based, 4 tiers)
+// ---------------------------------------------------------------------------
+
+function CyberPanelSslBadge({ expiresAt }: { expiresAt: string | null }) {
+  if (!expiresAt) {
+    return (
+      <span className="inline-flex items-center rounded-full border border-slate-600/30 bg-slate-600/10 px-2.5 py-1 text-xs font-medium text-slate-400 dark:border-slate-600/30 dark:bg-slate-600/10 dark:text-slate-400">
+        unknown
+      </span>
+    );
+  }
+
+  const days = Math.floor((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+  if (days <= 7) {
+    return (
+      <span
+        className="inline-flex items-center rounded-full border border-neon-rose/30 bg-neon-rose/10 px-2.5 py-1 text-xs font-medium text-neon-rose dark:border-neon-rose/30 dark:bg-neon-rose/10 dark:text-neon-rose"
+        title={`Expires ${new Date(expiresAt).toLocaleDateString()}`}
+      >
+        {days < 0 ? "expired" : `${days} day${days !== 1 ? "s" : ""}`}
+      </span>
+    );
+  }
+
+  if (days <= 30) {
+    return (
+      <span
+        className="inline-flex items-center rounded-full border border-neon-amber/30 bg-neon-amber/10 px-2.5 py-1 text-xs font-medium text-neon-amber dark:border-neon-amber/30 dark:bg-neon-amber/10 dark:text-neon-amber"
+        title={`Expires ${new Date(expiresAt).toLocaleDateString()}`}
+      >
+        {days} day{days !== 1 ? "s" : ""}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex items-center rounded-full border border-neon-emerald/30 bg-neon-emerald/10 px-2.5 py-1 text-xs font-medium text-neon-emerald dark:border-neon-emerald/30 dark:bg-neon-emerald/10 dark:text-neon-emerald"
+      title={`Expires ${new Date(expiresAt).toLocaleDateString()}`}
+    >
+      {days} days
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Service chip (active = green, inactive = red)
+// ---------------------------------------------------------------------------
+
+function ServiceChip({ label, status }: { label: string; status: "active" | "inactive" | "unknown" }) {
+  if (status === "active") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-neon-emerald/30 bg-neon-emerald/10 px-3 py-1 text-xs font-medium text-neon-emerald dark:border-neon-emerald/30 dark:bg-neon-emerald/10 dark:text-neon-emerald">
+        <span className="h-1.5 w-1.5 rounded-full bg-neon-emerald" />
+        {label}
+      </span>
+    );
+  }
+  if (status === "inactive") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-neon-rose/30 bg-neon-rose/10 px-3 py-1 text-xs font-medium text-neon-rose dark:border-neon-rose/30 dark:bg-neon-rose/10 dark:text-neon-rose">
+        <span className="h-1.5 w-1.5 rounded-full bg-neon-rose" />
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-600/30 bg-slate-600/10 px-3 py-1 text-xs font-medium text-slate-400 dark:border-slate-600/30 dark:bg-slate-600/10 dark:text-slate-400">
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+      {label}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CyberPanel detail panel component
+// ---------------------------------------------------------------------------
+
+function CyberPanelDetailPanel({ account }: { account: SharedHostingDetail }) {
+  const server = account.server;
+  const lastSyncAt = server?.lastSyncAt ?? null;
+  const lastSyncError = server?.lastSyncError ?? null;
+
+  const isStale = lastSyncAt
+    ? Date.now() - new Date(lastSyncAt).getTime() > 5 * 60 * 1000
+    : true;
+
+  // Pull serviceStatus from the first domain that has it (all domains on the
+  // same CyberPanel server carry an identical snapshot — EMS-23 design).
+  const rawServiceStatus =
+    account.domains.find((d: SharedHostingDomainInfo) => d.serviceStatus != null)?.serviceStatus ?? null;
+  const svcStatus = parseCyberPanelServiceStatus(rawServiceStatus);
+
+  return (
+    <div className="space-y-5">
+      {/* Stale warning — shown whenever data is older than 5 minutes */}
+      {isStale && (
+        <div className="rounded-xl border border-neon-amber/30 bg-neon-amber/10 p-4 backdrop-blur-sm dark:border-neon-amber/30 dark:bg-neon-amber/10">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-neon-amber/20 text-neon-amber dark:bg-neon-amber/20 dark:text-neon-amber">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div>
+              <div className="font-medium text-neon-amber dark:text-neon-amber">
+                Sync data may be stale — last sync was {relativeTime(lastSyncAt)}
+              </div>
+              <div className="mt-0.5 text-xs text-slate-400 dark:text-slate-400">
+                The scheduler syncs every 5 minutes. Check SSH connectivity if this persists.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Server info bar: last synced + error */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-slate-700/50 bg-obsidian-800/40 px-5 py-3 shadow-xl backdrop-blur-sm dark:border-slate-700/50 dark:bg-obsidian-800/40">
+        <div className="flex items-center gap-2 text-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          <span className="text-slate-400 dark:text-slate-400">Last synced:</span>
+          <span className="text-white dark:text-white">{relativeTime(lastSyncAt)}</span>
+        </div>
+        {lastSyncError && (
+          <div className="flex items-center gap-2 text-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-neon-rose" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span className="text-neon-rose dark:text-neon-rose">
+              Last sync failed: <span className="font-mono">{lastSyncError}</span>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Service status chips */}
+      <div className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 px-5 py-4 shadow-xl backdrop-blur-sm dark:border-slate-700/50 dark:bg-obsidian-800/40">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400">
+          Service Health
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <ServiceChip label="LSCPD" status={svcStatus?.lscpd ?? "unknown"} />
+          <ServiceChip label="LSWS" status={svcStatus?.lsws ?? "unknown"} />
+          <ServiceChip label="MariaDB" status={svcStatus?.mariadb ?? "unknown"} />
+        </div>
+      </div>
+
+      {/* Website list table */}
+      {account.domains.length === 0 ? (
+        <div className="rounded-xl border border-slate-700/30 bg-obsidian-800/30 py-12 text-center dark:border-slate-700/30 dark:bg-obsidian-800/30">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-700/30 dark:bg-slate-700/30">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+          </div>
+          <div className="mt-4 text-sm font-medium text-slate-400 dark:text-slate-400">No websites synced yet</div>
+          <div className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+            The scheduler will populate this list on the next sync cycle
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 shadow-xl backdrop-blur-sm overflow-hidden dark:border-slate-700/50 dark:bg-obsidian-800/40">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-700/50 dark:divide-slate-700/50">
+              <thead>
+                <tr className="bg-obsidian-800/60 dark:bg-obsidian-800/60">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400">
+                    Domain
+                  </th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400">
+                    PHP
+                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400">
+                    SSL Expiry
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/30 dark:divide-slate-700/30">
+                {account.domains.map((domain: SharedHostingDomainInfo, idx: number) => (
+                  <motion.tr
+                    key={domain.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.02 }}
+                    className="transition-colors hover:bg-obsidian-700/30 dark:hover:bg-obsidian-700/30"
+                  >
+                    <td className="px-5 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        <a
+                          href={`https://${domain.domain}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-white transition-colors hover:text-neon-cyan dark:text-white dark:hover:text-neon-cyan"
+                        >
+                          {domain.domain}
+                        </a>
+                        {domain.customerName && (
+                          <span className="text-xs text-slate-500 dark:text-slate-500">
+                            {domain.customerName}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3">
+                      {/* phpVersion is not yet stored in the DB schema (EMS-25 backlog) */}
+                      <span className="inline-flex items-center rounded-full border border-slate-600/30 bg-slate-600/10 px-2 py-0.5 text-xs text-slate-400 dark:border-slate-600/30 dark:bg-slate-600/10 dark:text-slate-400">
+                        —
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3 text-right">
+                      <CyberPanelSslBadge expiresAt={domain.sslExpiresAt} />
+                    </td>
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* SSL badge legend */}
+      <div className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 px-5 py-4 shadow-xl backdrop-blur-sm dark:border-slate-700/50 dark:bg-obsidian-800/40">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400">SSL Expiry Legend</p>
+        <div className="flex flex-wrap gap-5 text-sm text-slate-400 dark:text-slate-400">
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-neon-emerald" />
+            <span>Safe (&gt;30 days)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-neon-amber" />
+            <span>Warning (8–30 days)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-neon-rose" />
+            <span>Critical (&le;7 days or expired)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-500" />
+            <span>Unknown (no cert)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const inputClasses =
   "w-full rounded-lg border border-slate-700/50 bg-obsidian-800 px-4 py-2.5 text-sm text-white placeholder-slate-500 transition-all focus:border-neon-cyan/50 focus:outline-none focus:ring-2 focus:ring-neon-cyan/20";
@@ -214,7 +521,7 @@ export default function SharedHostingDetailPage() {
           <h1 className="mt-2 text-2xl font-display font-bold text-white">{account.name}</h1>
           {account.server && (
             <div className="mt-2 flex items-center gap-2">
-              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${account.server.type === "plesk" ? "bg-neon-violet/10 text-neon-violet" : "bg-slate-700 text-slate-400"}`}>
+              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${account.server.type === "plesk" ? "bg-neon-violet/10 text-neon-violet" : account.server.type === "cyberpanel" ? "bg-neon-amber/10 text-neon-amber" : "bg-slate-700 text-slate-400"}`}>
                 <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
                 </svg>
@@ -246,6 +553,15 @@ export default function SharedHostingDetailPage() {
           {error}
         </motion.div>
       )}
+
+      {/* CyberPanel branch — scheduler-managed inventory, no manual domain form */}
+      {account.server?.type === "cyberpanel" && (
+        <CyberPanelDetailPanel account={account} />
+      )}
+
+      {/* Plesk / manual branch — below is unchanged from pre-EMS-25 */}
+      {account.server?.type !== "cyberpanel" && (
+        <>
 
       {/* Add Domain Form */}
       <div className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-6 shadow-xl backdrop-blur-sm">
@@ -433,6 +749,9 @@ export default function SharedHostingDetailPage() {
           </div>
         </div>
       </div>
+
+        </> /* end Plesk / manual branch */
+      )}
     </motion.div>
   );
 }

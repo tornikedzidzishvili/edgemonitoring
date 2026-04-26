@@ -214,6 +214,58 @@ async function exec(conn: Client, command: string, timeoutMs: number): Promise<E
   );
 }
 
+// ---------------------------------------------------------------------------
+// openSshSession — exported adapter for EMS-23 CyberPanel sync
+// ---------------------------------------------------------------------------
+
+/**
+ * A live SSH connection adapted to the SshSession interface expected by the
+ * CyberPanel service helpers (EMS-22). Callers must call `close()` when done —
+ * use a try/finally block to guarantee cleanup even on error.
+ *
+ * The `execTimeoutMs` field controls per-command timeout (defaults to 30 s).
+ * A separate per-server budget timeout should be enforced by the caller via
+ * Promise.race; this value is only a per-command guard against hung commands.
+ */
+export interface OpenSshSession {
+  exec(cmd: string): Promise<{ stdout: string; stderr: string; code: number }>;
+  close(): void;
+}
+
+/**
+ * Open an SSH connection and return an adapter implementing OpenSshSession.
+ *
+ * Reuses the same `connectSsh` / `exec` primitives used by `probeOverSsh`;
+ * no new ssh2 logic is introduced here. The `signal`-terminated case (null
+ * exit code) is normalised to exit code 1 so callers always receive a number.
+ */
+export async function openSshSession(
+  params: SshProbeRequest & { execTimeoutMs?: number }
+): Promise<OpenSshSession> {
+  const conn = await connectSsh(params);
+  const execTimeoutMs = params.execTimeoutMs ?? 30_000;
+
+  return {
+    async exec(cmd: string): Promise<{ stdout: string; stderr: string; code: number }> {
+      const result = await exec(conn, cmd, execTimeoutMs);
+      // Normalise signal-terminated (null code) to non-zero so callers always
+      // receive a `number` as required by the SshSession interface.
+      return {
+        stdout: result.stdout,
+        stderr: result.stderr,
+        code: result.code ?? 1,
+      };
+    },
+    close(): void {
+      try {
+        conn.end();
+      } catch {
+        // Ignore errors on close — connection may already be gone.
+      }
+    },
+  };
+}
+
 export async function probeOverSsh(params: SshProbeRequest): Promise<SshProbeResult> {
   const timeoutMs = params.timeoutMs ?? 20_000;
   const conn = await connectSsh(params);

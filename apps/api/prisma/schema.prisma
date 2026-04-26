@@ -6,24 +6,43 @@ datasource db {
   provider = "sqlite"
 }
 
+// How a server's metrics are collected.
+// agent     — Dockerized agent pushes data (original path).
+// ssh       — Platform polls the server over SSH (agentless).
+// cyberpanel — Platform reads inventory from a CyberPanel API (shared hosting).
+enum MonitoringMode {
+  agent
+  ssh
+  cyberpanel
+}
+
+// Which ingestion path produced a ServerReport row.
+// agent — report was pushed by the Dockerized agent.
+// ssh   — report was produced by the SSH polling scheduler.
+enum ReportSource {
+  agent
+  ssh
+}
+
 model Server {
-  id           String   @id @default(cuid())
-  name         String
-  ip           String?
-  vendor       String?
-  specs        Json?
-  sshUser      String?
-  sshPort      Int?
-  sshKeyId     String?
-  sshKey       SshKey?  @relation(fields: [sshKeyId], references: [id])
-  apiKeyHash   String?
-  createdAt    DateTime @default(now())
-  lastSeenAt   DateTime?
-  webApps      WebApp[]
-  reports      ServerReport[]
-  metricMinutes ServerMetricMinute[]
-  alertConfig  ServerAlertConfig?
-  alerts       ServerAlert[]
+  id              String          @id @default(cuid())
+  name            String
+  ip              String?
+  vendor          String?
+  specs           Json?
+  sshUser         String?
+  sshPort         Int?
+  sshKeyId        String?
+  sshKey          SshKey?         @relation(fields: [sshKeyId], references: [id])
+  apiKeyHash      String?
+  monitoringMode  MonitoringMode  @default(agent)
+  createdAt       DateTime        @default(now())
+  lastSeenAt      DateTime?
+  webApps         WebApp[]
+  reports         ServerReport[]
+  metricMinutes   ServerMetricMinute[]
+  alertConfig     ServerAlertConfig?
+  alerts          ServerAlert[]
 
   @@index([apiKeyHash])
 }
@@ -54,6 +73,7 @@ model SshKey {
   passphraseTag  String?
   createdAt      DateTime @default(now())
   servers        Server[]
+  sharedHostingServers SharedHostingServer[]
 }
 
 model WebApp {
@@ -83,10 +103,11 @@ model UptimeCheckResult {
 }
 
 model ServerReport {
-  id         String   @id @default(cuid())
+  id         String       @id @default(cuid())
   serverId   String
-  server     Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  reportedAt DateTime @default(now())
+  server     Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  reportedAt DateTime     @default(now())
+  source     ReportSource @default(agent)
   payload    Json
 
   @@index([serverId, reportedAt])
@@ -192,18 +213,18 @@ model AlertTemplate {
   updatedAt    DateTime @updatedAt
 }
 
-// Shared Hosting Server Configuration (e.g., Plesk servers)
+// Shared Hosting Server Configuration (e.g., Plesk, CyberPanel servers)
 model SharedHostingServer {
   id             String   @id @default(cuid())
   name           String   // Label for this server (e.g., "Production Plesk", "Staging")
-  type           String   @default("plesk") // "plesk" | "manual" (for future: cpanel, directadmin, etc.)
+  type           String   @default("plesk") // "plesk" | "manual" | "cyberpanel"
   apiUrl         String?  // Base URL for API (e.g., https://plesk.example.com:8443)
-  
+
   // Encrypted API credentials
   apiKeyEnc      String?
   apiKeyIv       String?
   apiKeyTag      String?
-  
+
   // Optional: username/password auth for some panels
   usernameEnc    String?
   usernameIv     String?
@@ -211,16 +232,51 @@ model SharedHostingServer {
   passwordEnc    String?
   passwordIv     String?
   passwordTag    String?
-  
+
+  // SSH access — used by CyberPanel and other agentless polling types.
+  // All three fields are nullable so existing Plesk/manual rows are unaffected.
+  sshKeyId       String?  // FK to SshKey; null for non-SSH panel types
+  sshKey         SshKey?  @relation(fields: [sshKeyId], references: [id])
+  sshUser        String?  // SSH login username (e.g., "root")
+  sshPort        Int?     // SSH port; null means the service layer defaults to 22
+
   syncAll        Boolean  @default(true) // Sync all domains or only selected ones
   lastSyncAt     DateTime?
   lastSyncError  String?
-  
+
   enabled        Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  
+
   accounts       SharedHosting[]
+  alerts         SharedHostingAlert[]
+}
+
+// Alerts for CyberPanel service health (lscpd, lsws, mariadb).
+// Sibling to ServerAlert — uses a FK to SharedHostingServer instead of Server
+// because CyberPanel hosts are SharedHostingServer rows, not Server rows.
+//
+// status lifecycle:
+//   "pending"  — service was inactive on cycle N; no notification sent yet.
+//                Acts as the debounce buffer. Deleted on recovery before active.
+//   "active"   — service was inactive on cycle N+1; notification has been sent.
+//   "resolved" — service returned to active; resolution notification sent.
+//
+// This 2-cycle debounce prevents alert noise from brief service restarts
+// (e.g., `systemctl restart lscpd`) that recover within one sync interval.
+model SharedHostingAlert {
+  id                String              @id @default(cuid())
+  serverId          String
+  server            SharedHostingServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  type              String              // "lscpd" | "lsws" | "mariadb"
+  status            String              @default("pending") // "pending" | "active" | "resolved"
+  triggeredAt       DateTime            @default(now())
+  resolvedAt        DateTime?
+  lastNotifiedAt    DateTime?
+  notificationCount Int                 @default(0)
+
+  @@index([serverId, status])
+  @@index([status, triggeredAt])
 }
 
 model SharedHosting {
@@ -257,6 +313,11 @@ model SharedHostingDomain {
   sslExpiresAt    DateTime?
   sslIssuer       String?
   sslLastChecked  DateTime?
+
+  // CyberPanel service status — JSON-encoded blob from CyberPanel polling.
+  // Shape: { lscpd: "active"|"inactive", lsws: "active"|"inactive", mariadb: "active"|"inactive" }
+  // Null for non-CyberPanel domains.
+  serviceStatus   String?
 
   // DNS tracking
   lastKnownIp     String?

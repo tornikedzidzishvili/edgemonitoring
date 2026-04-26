@@ -1,3 +1,5 @@
 - [Downtime History Bug](project_downtime_history_bug.md) — P2: alert resolution collapses availability chart to 100%; fix is query-layer filter change, no schema work needed
 - [Branding + Email Templates Initiative](project_branding_email_initiative.md) — 8-story initiative: react-email templates + white-label logo/favicon/PWA, planned 2026-04-26
 - [Dead Code — SMTP Test Stub](project_smtp_test_dead_code.md) — /settings/smtp/test is a stub returning "would be sent"; real endpoint is /settings/alerts/test
+- [SSE Auth Bug — Reconnecting Badge](project_sse_auth_bug.md) — P1: EventSource can't send Bearer headers; fix is SSE ticket pattern (POST stream-ticket, ?ticket= query param)
+- [CyberPanel + SSH Monitoring Epic](project_cyberpanel_ssh_epic.md) — EMS-EPIC-001: 14 stories, 3 phases, 10-wave dispatch plan; schema-first constraint on Waves 1 and 4

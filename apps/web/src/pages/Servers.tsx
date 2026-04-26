@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { api, type ServerInfo, type SshKeyInfo, type SshProbeResult } from "../lib/api";
+import { api, type ServerInfo, type SshKeyInfo, type SshProbeResult, type MonitoringMode } from "../lib/api";
 import { formatDateTime } from "../lib/format";
 import InstallAgentModal from "../components/InstallAgentModal";
 
@@ -22,6 +22,7 @@ export default function Servers() {
   const [editSshKeyId, setEditSshKeyId] = useState<string>("");
   const [editMonitorDocker, setEditMonitorDocker] = useState(true);
   const [editAlertingEnabled, setEditAlertingEnabled] = useState(false);
+  const [editMonitoringMode, setEditMonitoringMode] = useState<MonitoringMode>("agent");
 
   const [creatingKey, setCreatingKey] = useState(false);
   const [keyName, setKeyName] = useState("");
@@ -39,7 +40,16 @@ export default function Servers() {
   const [serverSshKeyId, setServerSshKeyId] = useState<string>("");
   const [serverMonitorDocker, setServerMonitorDocker] = useState(true);
   const [serverCreateAgentKey, setServerCreateAgentKey] = useState(true);
+  const [serverMonitoringMode, setServerMonitoringMode] = useState<MonitoringMode>("agent");
   const [agentKeyOnce, setAgentKeyOnce] = useState<{ serverId: string; apiKey: string } | null>(null);
+
+  // Test SSH connection state (for the edit-mode row)
+  type TestSshState =
+    | { status: "idle" }
+    | { status: "loading" }
+    | { status: "ok"; latencyMs: number }
+    | { status: "error"; message: string };
+  const [testSshState, setTestSshState] = useState<Record<string, TestSshState>>({});
 
   const [generatingKeyFor, setGeneratingKeyFor] = useState<string | null>(null);
 
@@ -112,7 +122,8 @@ export default function Servers() {
         sshUser: serverSshUser || undefined,
         sshPort: serverSshPort ? Number(serverSshPort) : undefined,
         sshKeyId: serverSshKeyId || undefined,
-        createAgentKey: serverCreateAgentKey
+        monitoringMode: serverMonitoringMode,
+        createAgentKey: serverMonitoringMode === "agent" ? serverCreateAgentKey : false
       });
       if (created.apiKey) {
         setAgentKeyOnce({ serverId: created.server.id, apiKey: created.apiKey });
@@ -125,6 +136,7 @@ export default function Servers() {
       setServerSshKeyId("");
       setServerMonitorDocker(true);
       setServerCreateAgentKey(true);
+      setServerMonitoringMode("agent");
       await refreshServers();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create server");
@@ -170,6 +182,9 @@ export default function Servers() {
     setEditSshUser(s.sshUser ?? "");
     setEditSshPort(s.sshPort ? String(s.sshPort) : "22");
     setEditSshKeyId(s.sshKeyId ?? "");
+    setEditMonitoringMode(s.monitoringMode ?? "agent");
+    // Reset any prior test-ssh result for this server when entering edit
+    setTestSshState((prev) => ({ ...prev, [s.id]: { status: "idle" } }));
     const specs = (s.specs && typeof s.specs === "object") ? (s.specs as any) : {};
     setEditMonitorDocker(specs?.monitorDocker !== false);
     try {
@@ -199,6 +214,7 @@ export default function Servers() {
         sshUser: editSshUser ? editSshUser : null,
         sshPort: editSshPort ? Number(editSshPort) : null,
         sshKeyId: editSshKeyId ? editSshKeyId : null,
+        monitoringMode: editMonitoringMode,
         specs: { ...existingSpecs, monitorDocker: editMonitorDocker }
       });
       await api.saveServerAlertConfig(editingServerId, { alertingEnabled: editAlertingEnabled });
@@ -227,6 +243,29 @@ export default function Servers() {
       setError(e instanceof Error ? e.message : "Failed to delete server");
     } finally {
       setDeletingServerId(null);
+    }
+  }
+
+  function mapSshError(raw: string): string {
+    if (raw === "auth failure") return "SSH authentication failed — verify the selected key has access on the target server";
+    if (raw === "timeout") return "Connection timed out — verify the host IP and SSH port";
+    if (raw === "host unreachable") return "Host unreachable — verify the IP address and firewall rules";
+    return raw;
+  }
+
+  async function onTestSsh(serverId: string) {
+    setTestSshState((prev) => ({ ...prev, [serverId]: { status: "loading" } }));
+    try {
+      const res = await api.adminTestSshConnection(serverId);
+      if (res.ok) {
+        setTestSshState((prev) => ({ ...prev, [serverId]: { status: "ok", latencyMs: res.latencyMs } }));
+      } else {
+        setTestSshState((prev) => ({ ...prev, [serverId]: { status: "error", message: mapSshError(res.error) } }));
+      }
+    } catch (e) {
+      // HTTP 4xx from the route itself (e.g. no sshKeyId configured)
+      const msg = e instanceof Error ? e.message : "Connection test failed";
+      setTestSshState((prev) => ({ ...prev, [serverId]: { status: "error", message: msg } }));
     }
   }
 
@@ -415,6 +454,43 @@ REPORT_INTERVAL_SECONDS=5`}
               placeholder="hetzner"
             />
           </label>
+
+          {/* Monitoring Mode segmented control */}
+          <div className="block md:col-span-4">
+            <div className={labelClasses + " mb-1.5"}>Monitoring Mode</div>
+            <div
+              className="inline-flex rounded-lg border border-slate-700/50 bg-obsidian-900/60 p-0.5 gap-0.5"
+              role="group"
+              aria-label="Monitoring mode"
+            >
+              <button
+                type="button"
+                onClick={() => setServerMonitoringMode("agent")}
+                className={
+                  "rounded-md px-4 py-1.5 text-sm font-medium transition-all " +
+                  (serverMonitoringMode === "agent"
+                    ? "bg-neon-cyan/20 text-neon-cyan shadow-sm"
+                    : "text-slate-400 hover:text-slate-200")
+                }
+              >
+                Agent (installed)
+              </button>
+              <button
+                type="button"
+                onClick={() => setServerMonitoringMode("ssh")}
+                className={
+                  "rounded-md px-4 py-1.5 text-sm font-medium transition-all " +
+                  (serverMonitoringMode === "ssh"
+                    ? "bg-neon-cyan/20 text-neon-cyan shadow-sm"
+                    : "text-slate-400 hover:text-slate-200")
+                }
+              >
+                SSH (agentless)
+              </button>
+            </div>
+          </div>
+
+          {/* SSH user/port — shown for both modes (SSH credentials are still useful for agent mode) */}
           <label className="block">
             <div className={labelClasses}>SSH user</div>
             <input
@@ -434,15 +510,20 @@ REPORT_INTERVAL_SECONDS=5`}
               placeholder="22"
             />
           </label>
-          <label className="block md:col-span-3">
-            <div className={labelClasses}>SSH key</div>
+
+          {/* SSH key selector */}
+          <label className="block md:col-span-2">
+            <div className={labelClasses}>
+              SSH key{serverMonitoringMode === "ssh" ? <span className="ml-1 text-neon-rose">*</span> : null}
+            </div>
             <select
               className={inputClasses + " mt-1.5"}
               value={serverSshKeyId}
               onChange={(e) => setServerSshKeyId(e.target.value)}
               aria-label="SSH key"
+              aria-required={serverMonitoringMode === "ssh"}
             >
-              <option value="">(optional) Select SSH key</option>
+              <option value="">{serverMonitoringMode === "ssh" ? "Select SSH key" : "(optional) Select SSH key"}</option>
               {sshKeyOptions.map((k) => (
                 <option key={k.id} value={k.id}>
                   {k.name}
@@ -452,30 +533,75 @@ REPORT_INTERVAL_SECONDS=5`}
             <div className="mt-1.5 text-xs text-slate-500">Click "Load SSH keys" above if empty.</div>
           </label>
 
-          <label className="flex items-center gap-3 md:col-span-4">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-600 bg-obsidian-800 text-neon-cyan focus:ring-neon-cyan/50"
-              checked={serverMonitorDocker}
-              onChange={(e) => setServerMonitorDocker(e.target.checked)}
-            />
-            <span className="text-sm text-slate-300">Monitor Docker (containers + stats)</span>
-          </label>
+          {/* SSH mode — link to key upload */}
+          {serverMonitoringMode === "ssh" ? (
+            <div className="md:col-span-2 flex items-start gap-2 rounded-lg border border-slate-700/40 bg-slate-800/40 px-3 py-2.5 text-xs text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/40">
+              <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 dark:text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <span>
+                Upload your private key under{" "}
+                <Link to="/servers/manage" className="font-medium text-slate-300 underline underline-offset-2 hover:text-white dark:text-slate-300 dark:hover:text-white">
+                  Settings &gt; SSH Keys
+                </Link>{" "}
+                first
+              </span>
+            </div>
+          ) : null}
 
-          <label className="flex items-center gap-3 md:col-span-4">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-600 bg-obsidian-800 text-neon-cyan focus:ring-neon-cyan/50"
-              checked={serverCreateAgentKey}
-              onChange={(e) => setServerCreateAgentKey(e.target.checked)}
-            />
-            <span className="text-sm text-slate-300">Create agent key (required for realtime server stats)</span>
-          </label>
+          {serverMonitoringMode === "ssh" && !serverSshKeyId ? (
+            <div className="md:col-span-4 rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber">
+              Select an SSH key to use SSH polling
+            </div>
+          ) : null}
+
+          {/* Test Connection — disabled in create mode (no server ID yet) */}
+          {serverMonitoringMode === "ssh" ? (
+            <div className="md:col-span-4 flex items-center gap-2">
+              <button
+                type="button"
+                disabled
+                title="Save the server first to enable connection testing"
+                className="rounded-lg border border-slate-700/50 bg-obsidian-800/60 px-3 py-1.5 text-xs font-medium text-slate-500 cursor-not-allowed opacity-60"
+              >
+                Test Connection
+              </button>
+              <span className="text-xs text-slate-500">Save the server first to enable connection testing</span>
+            </div>
+          ) : null}
+
+          {/* Agent-mode only options */}
+          {serverMonitoringMode === "agent" ? (
+            <>
+              <label className="flex items-center gap-3 md:col-span-4">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-600 bg-obsidian-800 text-neon-cyan focus:ring-neon-cyan/50"
+                  checked={serverMonitorDocker}
+                  onChange={(e) => setServerMonitorDocker(e.target.checked)}
+                />
+                <span className="text-sm text-slate-300">Monitor Docker (containers + stats)</span>
+              </label>
+              <label className="flex items-center gap-3 md:col-span-4">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-600 bg-obsidian-800 text-neon-cyan focus:ring-neon-cyan/50"
+                  checked={serverCreateAgentKey}
+                  onChange={(e) => setServerCreateAgentKey(e.target.checked)}
+                />
+                <span className="text-sm text-slate-300">Create agent key (required for realtime server stats)</span>
+              </label>
+            </>
+          ) : null}
+
           <div className="md:col-span-4">
             <button
               type="submit"
-              disabled={creatingServer}
+              disabled={creatingServer || (serverMonitoringMode === "ssh" && !serverSshKeyId)}
               className={primaryBtnClasses}
+              title={serverMonitoringMode === "ssh" && !serverSshKeyId ? "Select an SSH key to use SSH polling" : undefined}
             >
               {creatingServer ? "Adding..." : "Add server"}
             </button>
@@ -555,8 +681,9 @@ REPORT_INTERVAL_SECONDS=5`}
                         value={editSshKeyId}
                         onChange={(e) => setEditSshKeyId(e.target.value)}
                         aria-label="SSH key"
+                        aria-required={editMonitoringMode === "ssh"}
                       >
-                        <option value="">(none)</option>
+                        <option value="">{editMonitoringMode === "ssh" ? "Select SSH key" : "(none)"}</option>
                         {sshKeyOptions.map((k) => (
                           <option key={k.id} value={k.id}>
                             {k.name}
@@ -590,7 +717,43 @@ REPORT_INTERVAL_SECONDS=5`}
                   </td>
                   <td className="px-4 py-4">
                     {editingServerId === s.id ? (
-                      <div className="space-y-3">
+                      <div className="space-y-3 min-w-[260px]">
+                        {/* Monitoring mode segmented control */}
+                        <div>
+                          <div className="mb-1 text-xs font-medium text-slate-400">Monitoring Mode</div>
+                          <div
+                            className="inline-flex rounded-lg border border-slate-700/50 bg-obsidian-900/60 p-0.5 gap-0.5"
+                            role="group"
+                            aria-label="Monitoring mode"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setEditMonitoringMode("agent")}
+                              className={
+                                "rounded-md px-3 py-1 text-xs font-medium transition-all " +
+                                (editMonitoringMode === "agent"
+                                  ? "bg-neon-cyan/20 text-neon-cyan shadow-sm"
+                                  : "text-slate-400 hover:text-slate-200")
+                              }
+                            >
+                              Agent
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditMonitoringMode("ssh")}
+                              className={
+                                "rounded-md px-3 py-1 text-xs font-medium transition-all " +
+                                (editMonitoringMode === "ssh"
+                                  ? "bg-neon-cyan/20 text-neon-cyan shadow-sm"
+                                  : "text-slate-400 hover:text-slate-200")
+                              }
+                            >
+                              SSH
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* SSH user / port — always visible */}
                         <div className="grid grid-cols-2 gap-2">
                           <input
                             className={inputClasses + " !py-1.5"}
@@ -606,29 +769,97 @@ REPORT_INTERVAL_SECONDS=5`}
                             placeholder="22"
                           />
                         </div>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-slate-600 bg-obsidian-800 text-neon-cyan focus:ring-neon-cyan/50"
-                            checked={editMonitorDocker}
-                            onChange={(e) => setEditMonitorDocker(e.target.checked)}
-                          />
-                          <span className="text-xs text-slate-300">Monitor Docker</span>
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-slate-600 bg-obsidian-800 text-neon-cyan focus:ring-neon-cyan/50"
-                            checked={editAlertingEnabled}
-                            onChange={(e) => setEditAlertingEnabled(e.target.checked)}
-                          />
-                          <span className="text-xs text-slate-300">Enable Alerting</span>
-                        </label>
+
+                        {/* Agent-mode extras */}
+                        {editMonitoringMode === "agent" ? (
+                          <>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-600 bg-obsidian-800 text-neon-cyan focus:ring-neon-cyan/50"
+                                checked={editMonitorDocker}
+                                onChange={(e) => setEditMonitorDocker(e.target.checked)}
+                              />
+                              <span className="text-xs text-slate-300">Monitor Docker</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-600 bg-obsidian-800 text-neon-cyan focus:ring-neon-cyan/50"
+                                checked={editAlertingEnabled}
+                                onChange={(e) => setEditAlertingEnabled(e.target.checked)}
+                              />
+                              <span className="text-xs text-slate-300">Enable Alerting</span>
+                            </label>
+                          </>
+                        ) : null}
+
+                        {/* SSH-mode: Test Connection */}
+                        {editMonitoringMode === "ssh" ? (
+                          <div className="space-y-1.5">
+                            {/* Info callout — link to SSH key management */}
+                            <div className="flex items-start gap-1.5 rounded-lg border border-slate-700/40 bg-slate-800/40 px-2.5 py-2 text-xs text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/40">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 dark:text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="8" x2="12" y2="12" />
+                                <line x1="12" y1="16" x2="12.01" y2="16" />
+                              </svg>
+                              <span>
+                                Upload your private key under{" "}
+                                <Link to="/servers/manage" className="font-medium text-slate-300 underline underline-offset-2 hover:text-white dark:text-slate-300 dark:hover:text-white">
+                                  Settings &gt; SSH Keys
+                                </Link>{" "}
+                                first
+                              </span>
+                            </div>
+                            {/* Validation hint when no SSH key is selected */}
+                            {!editSshKeyId ? (
+                              <div className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-2.5 py-1.5 text-xs text-neon-amber">
+                                Select an SSH key to use SSH polling
+                              </div>
+                            ) : null}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => onTestSsh(s.id)}
+                                disabled={(testSshState[s.id]?.status === "loading")}
+                                className="rounded-lg border border-neon-cyan/30 bg-neon-cyan/10 px-3 py-1.5 text-xs font-medium text-neon-cyan transition-all hover:bg-neon-cyan/20 disabled:opacity-60"
+                              >
+                                {testSshState[s.id]?.status === "loading" ? "Testing..." : "Test Connection"}
+                              </button>
+                              {(() => {
+                                const st = testSshState[s.id];
+                                if (!st || st.status === "idle" || st.status === "loading") return null;
+                                if (st.status === "ok") {
+                                  return (
+                                    <span className="flex items-center gap-1 text-xs text-neon-emerald">
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="20 6 9 17 4 12" />
+                                      </svg>
+                                      Connected ({st.latencyMs}ms)
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span className="flex items-center gap-1 text-xs text-neon-rose">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <line x1="18" y1="6" x2="6" y2="18" />
+                                      <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                    {st.message}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        ) : null}
+
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => onSaveEdit()}
-                            disabled={savingServerId === s.id}
+                            disabled={savingServerId === s.id || (editMonitoringMode === "ssh" && !editSshKeyId)}
+                            title={editMonitoringMode === "ssh" && !editSshKeyId ? "Select an SSH key to use SSH polling" : undefined}
                             className="rounded-lg bg-neon-emerald/20 px-3 py-1.5 text-xs font-medium text-neon-emerald transition-all hover:bg-neon-emerald/30 disabled:opacity-60"
                           >
                             {savingServerId === s.id ? "Saving..." : "Save"}

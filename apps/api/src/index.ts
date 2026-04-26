@@ -6,7 +6,7 @@ import { prisma } from "./db.js";
 import { getEnv } from "./env.js";
 import { getAgentKeyHash } from "./auth.js";
 import { generateApiKey, hashApiKey } from "./security.js";
-import { startUptimeScheduler, startDomainScheduler } from "./scheduler.js";
+import { startUptimeScheduler, startDomainScheduler, startSharedHostingSyncScheduler } from "./scheduler.js";
 import { getSslStatus } from "./domainChecker.js";
 import { probeOverSsh } from "./sshProbe.js";
 import { decryptString, encryptString } from "./cryptoBox.js";
@@ -24,12 +24,13 @@ import { brandingRoutes, ensureBrandingDir } from "./routes/branding.js";
 import { manifestRoutes } from "./routes/manifest.js";
 import { cleanExpiredSessions } from "./services/userAuth.js";
 import { startServerAlertScheduler } from "./serverAlertScheduler.js";
+import { startSshPollScheduler } from "./services/sshPollScheduler.js";
 import { seedDevAdmin } from "./seed.js";
 import { startDataRetention } from "./dataRetention.js";
 import { routeGuardPlugin } from "./plugins/routeGuard.js";
 import { rateLimiterPlugin } from "./plugins/rateLimiter.js";
-
 import { issueTicket, consumeTicket } from "./services/sseTickets.js";
+
 const env = getEnv();
 const app = Fastify({ logger: true });
 
@@ -77,6 +78,7 @@ app.get("/servers", async () => {
     sshUser: s.sshUser,
     sshPort: s.sshPort,
     sshKeyId: s.sshKeyId,
+    monitoringMode: s.monitoringMode,
     lastSeenAt: s.lastSeenAt,
     createdAt: s.createdAt
   }));
@@ -249,6 +251,7 @@ app.get("/servers/:id", async (req) => {
     sshUser: server.sshUser,
     sshPort: server.sshPort,
     sshKeyId: server.sshKeyId,
+    monitoringMode: server.monitoringMode,
     lastSeenAt: server.lastSeenAt,
     createdAt: server.createdAt,
     latestReport: latestReport ? { reportedAt: latestReport.reportedAt, payload: latestReport.payload } : null
@@ -929,7 +932,7 @@ app.delete("/admin/webapps/:id", async (req) => {
 });
 
 // Admin: create server + return API key once
-app.post("/admin/servers", async (req) => {
+app.post("/admin/servers", async (req, reply) => {
   const body = z
     .object({
       name: z.string().min(1),
@@ -938,10 +941,25 @@ app.post("/admin/servers", async (req) => {
       specs: z.unknown().optional(),
       sshUser: z.string().min(1).optional(),
       sshPort: z.coerce.number().int().positive().optional(),
-      sshKeyId: z.string().min(1).optional(),
+      sshKeyId: z.string().min(1).nullable().optional(),
+      monitoringMode: z.enum(["agent", "ssh", "cyberpanel"]).optional(),
       createAgentKey: z.boolean().optional()
     })
     .parse(req.body);
+
+  // The resolved mode after create: explicit value or the DB default ("agent").
+  const resolvedMode = body.monitoringMode ?? "agent";
+
+  // EMS-17: SSH and CyberPanel modes require a valid sshKeyId.
+  if (resolvedMode === "ssh" || resolvedMode === "cyberpanel") {
+    if (!body.sshKeyId) {
+      return reply.status(400).send({ error: "sshKeyId is required when monitoringMode is 'ssh' or 'cyberpanel'" });
+    }
+    const keyExists = await prisma.sshKey.findUnique({ where: { id: body.sshKeyId }, select: { id: true } });
+    if (!keyExists) {
+      return reply.status(400).send({ error: "sshKeyId does not reference an existing SSH key" });
+    }
+  }
 
   const createAgentKey = body.createAgentKey === true;
   const apiKey = createAgentKey ? generateApiKey() : null;
@@ -954,11 +972,26 @@ app.post("/admin/servers", async (req) => {
       sshUser: body.sshUser ?? null,
       sshPort: body.sshPort ?? null,
       sshKeyId: body.sshKeyId ?? null,
+      ...(body.monitoringMode !== undefined ? { monitoringMode: body.monitoringMode } : {}),
       apiKeyHash: apiKey ? hashApiKey(apiKey) : null
     }
   });
 
-  return apiKey ? { server, apiKey } : { server };
+  const serverPayload = {
+    id: server.id,
+    name: server.name,
+    ip: server.ip,
+    vendor: server.vendor,
+    specs: server.specs,
+    sshUser: server.sshUser,
+    sshPort: server.sshPort,
+    sshKeyId: server.sshKeyId,
+    monitoringMode: server.monitoringMode,
+    lastSeenAt: server.lastSeenAt,
+    createdAt: server.createdAt
+  };
+
+  return apiKey ? { server: serverPayload, apiKey } : { server: serverPayload };
 });
 
 // Admin: generate/rotate agent API key for an existing server (returned once)
@@ -975,7 +1008,7 @@ app.post("/admin/servers/:id/agent-key", async (req) => {
 });
 
 // Admin: update server inventory fields
-app.patch("/admin/servers/:id", async (req) => {
+app.patch("/admin/servers/:id", async (req, reply) => {
   const params = z.object({ id: z.string().min(1) }).parse(req.params);
   const body = z
     .object({
@@ -985,9 +1018,27 @@ app.patch("/admin/servers/:id", async (req) => {
       specs: z.unknown().nullable().optional(),
       sshUser: z.string().min(1).nullable().optional(),
       sshPort: z.coerce.number().int().positive().nullable().optional(),
-      sshKeyId: z.string().min(1).nullable().optional()
+      sshKeyId: z.string().min(1).nullable().optional(),
+      monitoringMode: z.enum(["agent", "ssh", "cyberpanel"]).optional()
     })
     .parse(req.body);
+
+  const existing = await prisma.server.findUnique({ where: { id: params.id }, select: { id: true, monitoringMode: true, sshKeyId: true } });
+  if (!existing) throw app.httpErrors.notFound("server-not-found");
+
+  // EMS-17: resolve the effective mode and sshKeyId after the patch is applied.
+  const resolvedMode = body.monitoringMode ?? existing.monitoringMode;
+  const resolvedSshKeyId = body.sshKeyId !== undefined ? body.sshKeyId : existing.sshKeyId;
+
+  if (resolvedMode === "ssh" || resolvedMode === "cyberpanel") {
+    if (!resolvedSshKeyId) {
+      return reply.status(400).send({ error: "sshKeyId is required when monitoringMode is 'ssh' or 'cyberpanel'" });
+    }
+    const keyExists = await prisma.sshKey.findUnique({ where: { id: resolvedSshKeyId }, select: { id: true } });
+    if (!keyExists) {
+      return reply.status(400).send({ error: "sshKeyId does not reference an existing SSH key" });
+    }
+  }
 
   const updated = await prisma.server.update({
     where: { id: params.id },
@@ -998,7 +1049,8 @@ app.patch("/admin/servers/:id", async (req) => {
       ...(body.specs !== undefined ? { specs: body.specs as any } : {}),
       ...(body.sshUser !== undefined ? { sshUser: body.sshUser } : {}),
       ...(body.sshPort !== undefined ? { sshPort: body.sshPort } : {}),
-      ...(body.sshKeyId !== undefined ? { sshKeyId: body.sshKeyId } : {})
+      ...(body.sshKeyId !== undefined ? { sshKeyId: body.sshKeyId } : {}),
+      ...(body.monitoringMode !== undefined ? { monitoringMode: body.monitoringMode } : {})
     }
   });
 
@@ -1011,6 +1063,7 @@ app.patch("/admin/servers/:id", async (req) => {
     sshUser: updated.sshUser,
     sshPort: updated.sshPort,
     sshKeyId: updated.sshKeyId,
+    monitoringMode: updated.monitoringMode,
     lastSeenAt: updated.lastSeenAt,
     createdAt: updated.createdAt
   };
@@ -1196,6 +1249,112 @@ app.post("/admin/servers/:id/probe", async (req) => {
   });
 
   return { serverId: server.id, serverName: server.name, ...result };
+});
+
+// Admin: test SSH connectivity for a server (EMS-18)
+//
+// Returns { ok: true, latencyMs: number } on success or
+// { ok: false, error: string } on any connection failure.
+// HTTP 200 in both cases — 404/400 only for missing server or no sshKeyId.
+// A 10-second Promise.race timeout is enforced; the sanitized error string
+// never contains raw library messages, stack traces, or key material.
+app.post("/admin/servers/:id/test-ssh", async (req, reply) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+
+  // --- 1. Resolve server ---
+  const server = await prisma.server.findUnique({
+    where: { id: params.id },
+    include: { sshKey: true }
+  });
+  if (!server) {
+    return reply.status(404).send({ error: "server not found" });
+  }
+
+  // --- 2. Require SSH key configured ---
+  if (!server.sshKeyId || !server.sshKey) {
+    return reply.status(400).send({ error: "server has no sshKeyId configured" });
+  }
+
+  const key = server.sshKey;
+  const host = server.ip;
+  if (!host) {
+    return reply.status(400).send({ error: "server has no ip configured" });
+  }
+
+  // --- 3. Decrypt credentials (plaintext lives only in this scope) ---
+  const privateKey = decryptString(
+    { enc: key.privateKeyEnc, iv: key.privateKeyIv, tag: key.privateKeyTag },
+    env.SSH_KEY_MASTER_SECRET
+  );
+  const passphrase =
+    key.passphraseEnc && key.passphraseIv && key.passphraseTag
+      ? decryptString(
+          { enc: key.passphraseEnc, iv: key.passphraseIv, tag: key.passphraseTag },
+          env.SSH_KEY_MASTER_SECRET
+        )
+      : undefined;
+
+  const username = server.sshUser ?? key.username ?? undefined;
+  const port = server.sshPort ?? key.port ?? 22;
+
+  if (!username) {
+    return reply.status(400).send({ error: "server has no ssh username configured" });
+  }
+
+  // --- 4. Probe with 10-second timeout ---
+  const TIMEOUT_MS = 10_000;
+  const startedAt = Date.now();
+
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("__timeout__")), TIMEOUT_MS)
+  );
+
+  let sanitizedError: string;
+
+  try {
+    await Promise.race([
+      probeOverSsh({ host, port, username, privateKey, passphrase, timeoutMs: TIMEOUT_MS, includeDocker: false }),
+      timeoutPromise
+    ]);
+    return reply.send({ ok: true, latencyMs: Date.now() - startedAt });
+  } catch (err: unknown) {
+    // --- 5. Sanitize errors — never expose key material or raw library output ---
+    const msg: string =
+      err instanceof Error ? err.message : "";
+    const code: string =
+      (err != null && typeof err === "object" && "code" in err && typeof (err as Record<string, unknown>).code === "string")
+        ? ((err as Record<string, unknown>).code as string)
+        : "";
+
+    if (msg === "__timeout__") {
+      sanitizedError = "timeout";
+    } else if (
+      msg.toLowerCase().includes("all configured authentication methods failed") ||
+      msg.toLowerCase().includes("authentication failed") ||
+      msg.toLowerCase().includes("publickey") ||
+      code === "ERR_AUTHENTICATION"
+    ) {
+      sanitizedError = "auth failure";
+    } else if (
+      code === "ECONNREFUSED" ||
+      code === "EHOSTUNREACH" ||
+      code === "ENETUNREACH" ||
+      msg.toLowerCase().includes("connection refused") ||
+      msg.toLowerCase().includes("host unreachable")
+    ) {
+      sanitizedError = "host unreachable";
+    } else {
+      // Derive a short lowercase phrase from the error code; fall back to generic.
+      // Cap at 80 chars; never include message text which may contain key material.
+      const phrase = code ? code.toLowerCase().replace(/_/g, " ") : "connection failed";
+      sanitizedError = phrase.slice(0, 80);
+    }
+
+    // Server-side log: serverId + sanitized phrase only — never raw error, never key.
+    console.error(`[test-ssh] serverId=${params.id} error="${sanitizedError}"`);
+
+    return reply.send({ ok: false, error: sanitizedError });
+  }
 });
 
 // Admin: install agent on a server via SSH
@@ -1466,7 +1625,9 @@ app.get("/shared-hosting/:id", async (req) => {
         select: {
           id: true,
           name: true,
-          type: true
+          type: true,
+          lastSyncAt: true,
+          lastSyncError: true
         }
       },
       domains: {
@@ -1503,6 +1664,7 @@ app.get("/shared-hosting/:id", async (req) => {
         sslIssuer: d.sslIssuer,
         sslStatus: getSslStatus(d.sslExpiresAt),
         sslLastChecked: d.sslLastChecked,
+        serviceStatus: d.serviceStatus ?? null,
         lastKnownIp: d.lastKnownIp,
         dnsLastChecked: d.dnsLastChecked,
         lastCheck: lastCheck
@@ -1719,6 +1881,8 @@ app.delete("/admin/shared-hosting/:id/domains/:domainId", async (req) => {
 startUptimeScheduler(prisma, env);
 startDomainScheduler(prisma, env);
 startServerAlertScheduler(prisma, env);
+startSshPollScheduler(prisma, env);
+startSharedHostingSyncScheduler(prisma, env);
 
 // Seed dev admin user in development mode
 await seedDevAdmin();

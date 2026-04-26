@@ -169,7 +169,7 @@ export default function SharedHosting() {
             <option value="">All Servers</option>
             {servers.map((server) => (
               <option key={server.id} value={server.id}>
-                {server.name} ({server.type === "plesk" ? "Plesk" : "Manual"})
+                {server.name} ({server.type === "plesk" ? "Plesk" : server.type === "cyberpanel" ? "CyberPanel" : "Manual"})
               </option>
             ))}
           </select>
@@ -285,7 +285,7 @@ export default function SharedHosting() {
                   </Link>
                   {account.server && (
                     <div className="mt-1 flex items-center gap-2">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${account.server.type === "plesk" ? "bg-neon-violet/10 text-neon-violet" : "bg-slate-700 text-slate-400"}`}>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${account.server.type === "plesk" ? "bg-neon-violet/10 text-neon-violet" : account.server.type === "cyberpanel" ? "bg-neon-amber/10 text-neon-amber" : "bg-slate-700 text-slate-400"}`}>
                         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
                         </svg>

@@ -429,6 +429,10 @@ export default function ServerDetailPage() {
 
   const isActive = detail?.lastSeenAt ? Date.now() - new Date(detail.lastSeenAt).getTime() < 5 * 60 * 1000 : false;
   const uptimeMs = detail?.createdAt ? Date.now() - new Date(detail.createdAt).getTime() : 0;
+  const isSSH = detail?.monitoringMode === "ssh";
+  const sshStale = isSSH && (
+    !detail?.lastSeenAt || Date.now() - new Date(detail.lastSeenAt).getTime() > 3 * 60 * 1000
+  );
 
   async function handleAddEndpoint(e: React.FormEvent) {
     e.preventDefault();
@@ -540,20 +544,30 @@ export default function ServerDetailPage() {
             </div>
           </div>
           <div className="hidden shrink-0 items-center gap-2 sm:flex">
-            {(() => {
-              const canInstall = !!(detail?.ip && detail?.sshKeyId);
-              return (
-                <button
-                  type="button"
-                  onClick={() => canInstall && setShowInstallModal(true)}
-                  disabled={!canInstall}
-                  title={!canInstall ? "Requires IP and an SSH key to be set on this server" : "Install monitoring agent via SSH"}
-                  className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-4 py-2 text-sm font-medium text-neon-amber transition-all hover:bg-neon-amber/20 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Install agent
-                </button>
-              );
-            })()}
+            {isSSH ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-500/30 bg-slate-500/10 px-2.5 py-1 text-xs font-medium text-slate-400 dark:border-slate-500/30 dark:bg-slate-500/10 dark:text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3" />
+                  <line x1="8" y1="12" x2="16" y2="12" />
+                </svg>
+                SSH Polling
+              </span>
+            ) : (
+              (() => {
+                const canInstall = !!(detail?.ip && detail?.sshKeyId);
+                return (
+                  <button
+                    type="button"
+                    onClick={() => canInstall && setShowInstallModal(true)}
+                    disabled={!canInstall}
+                    title={!canInstall ? "Requires IP and an SSH key to be set on this server" : "Install monitoring agent via SSH"}
+                    className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-4 py-2 text-sm font-medium text-neon-amber transition-all hover:bg-neon-amber/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Install agent
+                  </button>
+                );
+              })()
+            )}
             <Link to="/servers" className="rounded-lg border border-slate-700/50 bg-obsidian-800/60 px-4 py-2 text-sm font-medium text-slate-300 transition-all hover:bg-obsidian-700/50 hover:text-white">
               Back to Servers
             </Link>
@@ -565,6 +579,24 @@ export default function ServerDetailPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-neon-rose/30 bg-neon-rose/10 px-4 py-3 text-sm text-neon-rose">
           {error}
         </motion.div>
+      ) : null}
+
+      {sshStale ? (
+        <div className="rounded-xl border border-neon-amber/30 bg-neon-amber/10 p-5 backdrop-blur-sm dark:border-neon-amber/30 dark:bg-neon-amber/10">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-neon-amber/20 text-neon-amber dark:bg-neon-amber/20 dark:text-neon-amber">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div>
+              <div className="font-medium text-neon-amber dark:text-neon-amber">No recent data — SSH polling may be failing</div>
+              <div className="mt-1 text-sm text-slate-400 dark:text-slate-400">
+                No report received in the last 3 minutes. Check SSH connectivity and polling configuration for this server.
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {/* Quick Stats */}
@@ -791,7 +823,7 @@ export default function ServerDetailPage() {
         )}
       </div>
 
-      {!detail?.latestReport ? (
+      {!detail?.latestReport && !isSSH ? (
         <div className="rounded-xl border border-neon-amber/30 bg-neon-amber/10 p-5 backdrop-blur-sm">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-amber/20 text-neon-amber">
@@ -1045,7 +1077,7 @@ export default function ServerDetailPage() {
         </div>
       )}
 
-      {showInstallModal && detail ? (
+      {showInstallModal && detail && !isSSH ? (
         <InstallAgentModal
           serverId={serverId}
           serverName={detail.name}

@@ -33,6 +33,8 @@ export type UptimePoint = {
   error: string | null;
 };
 
+export type MonitoringMode = "agent" | "ssh" | "cyberpanel";
+
 export type ServerInfo = {
   id: string;
   name: string;
@@ -42,6 +44,7 @@ export type ServerInfo = {
   sshUser?: string | null;
   sshPort?: number | null;
   sshKeyId?: string | null;
+  monitoringMode?: MonitoringMode | null;
   lastSeenAt: string | null;
   createdAt: string;
 };
@@ -121,6 +124,7 @@ export type ServerDetail = {
   sshUser?: string | null;
   sshPort?: number | null;
   sshKeyId?: string | null;
+  monitoringMode?: MonitoringMode | null;
   lastSeenAt: string | null;
   createdAt: string;
   latestReport: { reportedAt: string; payload: unknown } | null;
@@ -338,6 +342,10 @@ export type SharedHostingServerInfo = {
   id: string;
   name: string;
   type: string;
+  // Present on the account detail response (/shared-hosting/:id); absent on the
+  // servers list response (/shared-hosting/servers).
+  lastSyncAt?: string | null;
+  lastSyncError?: string | null;
 };
 
 export type SharedHostingSummary = {
@@ -372,6 +380,7 @@ export type SharedHostingDomainInfo = {
   sslIssuer: string | null;
   sslStatus: SslStatus;
   sslLastChecked: string | null;
+  serviceStatus: string | null;
   lastKnownIp: string | null;
   dnsLastChecked: string | null;
   lastCheck: DomainCheckInfo | null;
@@ -392,10 +401,13 @@ export type SharedHostingDetail = {
 export type SharedHostingServerDetail = {
   id: string;
   name: string;
-  type: "plesk" | "manual";
+  type: "plesk" | "manual" | "cyberpanel";
   apiUrl: string | null;
   hasApiKey: boolean;
   hasCredentials: boolean;
+  sshKeyId: string | null;
+  sshUser: string | null;
+  sshPort: number | null;
   syncAll: boolean;
   lastSyncAt: string | null;
   lastSyncError: string | null;
@@ -549,6 +561,7 @@ export const api = {
     sshUser?: string;
     sshPort?: number;
     sshKeyId?: string;
+    monitoringMode?: MonitoringMode;
     createAgentKey?: boolean;
   }) =>
     apiPost<{ server: ServerInfo; apiKey?: string }>(
@@ -561,6 +574,7 @@ export const api = {
         sshUser: params.sshUser || undefined,
         sshPort: params.sshPort || undefined,
         sshKeyId: params.sshKeyId || undefined,
+        monitoringMode: params.monitoringMode,
         createAgentKey: params.createAgentKey === true
       }
     ),
@@ -577,6 +591,7 @@ export const api = {
     sshUser?: string | null;
     sshPort?: number | null;
     sshKeyId?: string | null;
+    monitoringMode?: MonitoringMode;
   }) =>
     apiPatch<ServerInfo>(
       `/admin/servers/${encodeURIComponent(params.id)}`,
@@ -587,8 +602,15 @@ export const api = {
         specs: params.specs,
         sshUser: params.sshUser,
         sshPort: params.sshPort,
-        sshKeyId: params.sshKeyId
+        sshKeyId: params.sshKeyId,
+        monitoringMode: params.monitoringMode
       }
+    ),
+
+  adminTestSshConnection: (serverId: string) =>
+    apiPost<{ ok: true; latencyMs: number } | { ok: false; error: string }>(
+      `/admin/servers/${encodeURIComponent(serverId)}/test-ssh`,
+      {}
     ),
 
   adminDeleteServer: (params: { id: string }) =>
@@ -667,11 +689,14 @@ export const api = {
     ),
   createSharedHostingServer: (params: {
     name: string;
-    type?: "plesk" | "manual";
+    type?: "plesk" | "manual" | "cyberpanel";
     apiUrl?: string;
     apiKey?: string;
     username?: string;
     password?: string;
+    sshKeyId?: string;
+    sshUser?: string;
+    sshPort?: number;
     syncAll?: boolean;
     enabled?: boolean;
   }) => apiPost<{ server: SharedHostingServerDetail }>(`/settings/shared-hosting/servers`, params),
@@ -679,11 +704,14 @@ export const api = {
     id: string,
     params: {
       name?: string;
-      type?: "plesk" | "manual";
+      type?: "plesk" | "manual" | "cyberpanel";
       apiUrl?: string | null;
       apiKey?: string | null;
       username?: string | null;
       password?: string | null;
+      sshKeyId?: string | null;
+      sshUser?: string | null;
+      sshPort?: number | null;
       syncAll?: boolean;
       enabled?: boolean;
     }

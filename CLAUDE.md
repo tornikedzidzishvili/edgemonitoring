@@ -192,6 +192,39 @@ Master key: `SSH_KEY_MASTER_SECRET` env var (min 16 chars).
 1. Classify the route in `src/plugins/routeGuard.ts` (admin, authenticated, or public)
 2. If you skip this, the fail-closed default returns 403 — this is by design
 
+## Monitoring Modes
+
+Edge Monitoring supports three ways of collecting data from a target host. The mode is selected per-server (or per-shared-hosting-server) when the operator adds it; downstream dashboards, alerts, and retention behave the same regardless of mode because all metrics flow into the same `ServerReport` / `ServerMetricMinute` tables.
+
+### `monitoringMode` enum on `Server`
+
+Defined in `apps/api/prisma/schema.prisma`:
+
+| Value | Description |
+|---|---|
+| `agent` | Default. Server runs the Dockerized agent (`apps/agent`) which pushes metrics to `POST /agents/report` using an `X-Agent-Key` header. Original ingestion path. |
+| `ssh` | Server is polled agentlessly over SSH every 60s by `startSshPollScheduler` (`apps/api/src/services/sshPollScheduler.ts`). No agent install on the host. Cadence is configurable via `SSH_POLL_INTERVAL_MS`. |
+| `cyberpanel` | Reserved on `Server`. Per-server CyberPanel monitoring is handled today via the separate `SharedHostingServer` flow (see below) rather than this enum value. Documented for completeness so future work doesn't re-introduce the same enum value. |
+
+### Adding an SSH-polled server
+
+1. Settings → SSH Keys → upload the private key. The key (and optional passphrase) are encrypted at rest with AES-256-GCM via `src/cryptoBox.ts`; master secret is `SSH_KEY_MASTER_SECRET`.
+2. Servers → Add Server → set **Monitoring Mode** to `ssh`, pick the uploaded key from the dropdown, save.
+3. On the saved server, click **Test Connection** to verify the API can reach the host and run a sample probe before the scheduler picks it up.
+
+### Adding a CyberPanel-type SharedHostingServer
+
+CyberPanel inventory (websites, SSL expiry, control-plane service health) is a distinct flow from per-server metrics.
+
+1. Settings → Shared Hosting Servers → Add → **Type = CyberPanel**. Server credentials are encrypted at rest the same way as SSH keys.
+2. The host is polled by `startSharedHostingSyncScheduler` (`apps/api/src/scheduler.ts`), which delegates to `syncCyberPanel` (`apps/api/src/services/cyberpanelSync.ts`).
+3. Per cycle, the sync runs:
+   - `cyberpanel listWebsites --json` (falls back to plain text) — populates the website inventory
+   - `systemctl is-active lscpd lsws mariadb` — server-wide control-plane snapshot
+   - `openssl x509 -enddate -noout -in <certPath>` per site — SSL expiry
+4. Service-health alerts fire after **2 consecutive `inactive` cycles** for a given service (LSCPD, LSWS, MariaDB) — debounces transient `systemctl` blips.
+5. **Minimum tested CyberPanel CLI version**: `[TBD — confirm with first production install]`.
+
 ## Project Conventions
 
 - TypeScript strict mode, ES modules (`"type": "module"`)

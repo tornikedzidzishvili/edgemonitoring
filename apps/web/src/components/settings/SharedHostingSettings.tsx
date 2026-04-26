@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api, type SharedHostingServerDetail, type PleskAvailableDomain, type SyncedDomain } from "../../lib/api";
+import { api, type SharedHostingServerDetail, type PleskAvailableDomain, type SyncedDomain, type SshKeyInfo } from "../../lib/api";
 
 const inputClasses =
   "w-full rounded-lg border border-slate-700/50 bg-obsidian-800 px-4 py-2.5 text-sm text-white placeholder-slate-500 transition-all focus:border-neon-cyan/50 focus:outline-none focus:ring-2 focus:ring-neon-cyan/20";
@@ -17,10 +17,19 @@ const secondaryBtnClasses =
 const dangerBtnClasses =
   "rounded-lg bg-neon-rose/10 border border-neon-rose/30 px-4 py-2.5 text-sm font-medium text-neon-rose transition-all hover:bg-neon-rose/20 disabled:opacity-50";
 
+function mapSshError(raw: string): string {
+  if (raw === "auth failure") return "SSH authentication failed — verify the selected key has access on the target server";
+  if (raw === "timeout") return "Connection timed out — verify the host IP and SSH port";
+  if (raw === "host unreachable") return "Host unreachable — verify the IP address and firewall rules";
+  return raw;
+}
+
 type ServerModalMode = "create" | "edit" | "domains";
+type ServerType = "plesk" | "manual" | "cyberpanel";
 
 export default function SharedHostingSettings() {
   const [servers, setServers] = useState<SharedHostingServerDetail[]>([]);
+  const [sshKeys, setSshKeys] = useState<SshKeyInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -32,11 +41,14 @@ export default function SharedHostingSettings() {
 
   // Form state
   const [formName, setFormName] = useState("");
-  const [formType, setFormType] = useState<"plesk" | "manual">("plesk");
+  const [formType, setFormType] = useState<ServerType>("plesk");
   const [formApiUrl, setFormApiUrl] = useState("");
   const [formApiKey, setFormApiKey] = useState("");
   const [formUsername, setFormUsername] = useState("");
   const [formPassword, setFormPassword] = useState("");
+  const [formSshKeyId, setFormSshKeyId] = useState("");
+  const [formSshUser, setFormSshUser] = useState("root");
+  const [formSshPort, setFormSshPort] = useState("22");
   const [formSyncAll, setFormSyncAll] = useState(true);
   const [formEnabled, setFormEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -61,8 +73,18 @@ export default function SharedHostingSettings() {
     }
   }
 
+  async function loadSshKeys() {
+    try {
+      const keys = await api.adminListSshKeys();
+      setSshKeys(keys);
+    } catch {
+      // Non-fatal — SSH key dropdown will be empty
+    }
+  }
+
   useEffect(() => {
     loadServers();
+    loadSshKeys();
   }, []);
 
   function resetForm() {
@@ -72,6 +94,9 @@ export default function SharedHostingSettings() {
     setFormApiKey("");
     setFormUsername("");
     setFormPassword("");
+    setFormSshKeyId("");
+    setFormSshUser("root");
+    setFormSshPort("22");
     setFormSyncAll(true);
     setFormEnabled(true);
     setEditingServer(null);
@@ -89,11 +114,14 @@ export default function SharedHostingSettings() {
   function openEditModal(server: SharedHostingServerDetail) {
     setEditingServer(server);
     setFormName(server.name);
-    setFormType(server.type as "plesk" | "manual");
+    setFormType(server.type);
     setFormApiUrl(server.apiUrl || "");
     setFormApiKey("");
     setFormUsername("");
     setFormPassword("");
+    setFormSshKeyId(server.sshKeyId || "");
+    setFormSshUser(server.sshUser || "root");
+    setFormSshPort(server.sshPort ? String(server.sshPort) : "22");
     setFormSyncAll(server.syncAll);
     setFormEnabled(server.enabled);
     setModalMode("edit");
@@ -143,10 +171,13 @@ export default function SharedHostingSettings() {
         await api.createSharedHostingServer({
           name: formName.trim(),
           type: formType,
-          apiUrl: formApiUrl.trim() || undefined,
-          apiKey: formApiKey.trim() || undefined,
-          username: formUsername.trim() || undefined,
-          password: formPassword.trim() || undefined,
+          apiUrl: formType === "plesk" ? (formApiUrl.trim() || undefined) : undefined,
+          apiKey: formType === "plesk" ? (formApiKey.trim() || undefined) : undefined,
+          username: formType === "plesk" ? (formUsername.trim() || undefined) : undefined,
+          password: formType === "plesk" ? (formPassword.trim() || undefined) : undefined,
+          sshKeyId: formType === "cyberpanel" ? (formSshKeyId || undefined) : undefined,
+          sshUser: formType === "cyberpanel" ? (formSshUser.trim() || undefined) : undefined,
+          sshPort: formType === "cyberpanel" && formSshPort ? Number(formSshPort) : undefined,
           syncAll: formSyncAll,
           enabled: formEnabled
         });
@@ -155,10 +186,13 @@ export default function SharedHostingSettings() {
         await api.updateSharedHostingServer(editingServer.id, {
           name: formName.trim(),
           type: formType,
-          apiUrl: formApiUrl.trim() || null,
-          apiKey: formApiKey.trim() || undefined,
-          username: formUsername.trim() || undefined,
-          password: formPassword.trim() || undefined,
+          apiUrl: formType === "plesk" ? (formApiUrl.trim() || null) : null,
+          apiKey: formType === "plesk" ? (formApiKey.trim() || undefined) : undefined,
+          username: formType === "plesk" ? (formUsername.trim() || undefined) : undefined,
+          password: formType === "plesk" ? (formPassword.trim() || undefined) : undefined,
+          sshKeyId: formType === "cyberpanel" ? (formSshKeyId || null) : null,
+          sshUser: formType === "cyberpanel" ? (formSshUser.trim() || null) : null,
+          sshPort: formType === "cyberpanel" && formSshPort ? Number(formSshPort) : null,
           syncAll: formSyncAll,
           enabled: formEnabled
         });
@@ -201,7 +235,7 @@ export default function SharedHostingSettings() {
       if (result.ok) {
         setSuccess(result.message);
       } else {
-        setError(result.message);
+        setError(mapSshError(result.message));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Connection test failed");
@@ -340,10 +374,14 @@ export default function SharedHostingSettings() {
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${server.enabled ? "bg-neon-cyan/10" : "bg-slate-700/50"}`}>
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${server.enabled ? (server.type === "cyberpanel" ? "bg-neon-amber/10" : "bg-neon-cyan/10") : "bg-slate-700/50"}`}>
                     {server.type === "plesk" ? (
                       <svg className={`h-5 w-5 ${server.enabled ? "text-neon-cyan" : "text-slate-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                      </svg>
+                    ) : server.type === "cyberpanel" ? (
+                      <svg className={`h-5 w-5 ${server.enabled ? "text-neon-amber" : "text-slate-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
                       </svg>
                     ) : (
                       <svg className={`h-5 w-5 ${server.enabled ? "text-neon-cyan" : "text-slate-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -354,8 +392,14 @@ export default function SharedHostingSettings() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium text-white">{server.name}</h3>
-                      <span className={`rounded-full px-2 py-0.5 text-xs ${server.type === "plesk" ? "bg-neon-violet/10 text-neon-violet" : "bg-slate-700 text-slate-400"}`}>
-                        {server.type === "plesk" ? "Plesk" : "Manual"}
+                      <span className={`rounded-full px-2 py-0.5 text-xs ${
+                        server.type === "plesk"
+                          ? "bg-neon-violet/10 text-neon-violet"
+                          : server.type === "cyberpanel"
+                          ? "bg-neon-amber/10 text-neon-amber"
+                          : "bg-slate-700 text-slate-400"
+                      }`}>
+                        {server.type === "plesk" ? "Plesk" : server.type === "cyberpanel" ? "CyberPanel" : "Manual"}
                       </span>
                       {!server.enabled && (
                         <span className="rounded-full bg-slate-700 px-2 py-0.5 text-xs text-slate-400">
@@ -365,6 +409,11 @@ export default function SharedHostingSettings() {
                     </div>
                     {server.apiUrl && (
                       <p className="mt-0.5 text-xs text-slate-500">{server.apiUrl}</p>
+                    )}
+                    {server.type === "cyberpanel" && server.sshKeyId && (
+                      <p className="mt-0.5 font-mono text-xs text-slate-500">
+                        SSH key: {server.sshKeyId.slice(0, 8)}... {server.sshUser ? `· user: ${server.sshUser}` : ""}{server.sshPort && server.sshPort !== 22 ? ` · port: ${server.sshPort}` : ""}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -449,32 +498,67 @@ export default function SharedHostingSettings() {
             {/* Create/Edit Form */}
             {(modalMode === "create" || modalMode === "edit") && (
               <form onSubmit={handleSaveServer} className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-slate-300">Server Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g., Production Plesk"
-                      value={formName}
-                      onChange={(e) => setFormName(e.target.value)}
-                      className={inputClasses}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="server-type" className="mb-1.5 block text-sm font-medium text-slate-300">Type</label>
-                    <select
-                      id="server-type"
-                      value={formType}
-                      onChange={(e) => setFormType(e.target.value as "plesk" | "manual")}
-                      className={selectClasses}
+                {/* Server Name */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">Server Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Production Plesk"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className={inputClasses}
+                    required
+                  />
+                </div>
+
+                {/* Type — segmented control */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">Type</label>
+                  <div
+                    className="inline-flex rounded-lg border border-slate-700/50 bg-obsidian-900/60 p-0.5 gap-0.5"
+                    role="group"
+                    aria-label="Server type"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setFormType("plesk")}
+                      className={
+                        "rounded-md px-4 py-1.5 text-sm font-medium transition-all " +
+                        (formType === "plesk"
+                          ? "bg-neon-cyan/20 text-neon-cyan shadow-sm"
+                          : "text-slate-400 hover:text-slate-200")
+                      }
                     >
-                      <option value="plesk">Plesk</option>
-                      <option value="manual">Manual</option>
-                    </select>
+                      Plesk
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormType("cyberpanel")}
+                      className={
+                        "rounded-md px-4 py-1.5 text-sm font-medium transition-all " +
+                        (formType === "cyberpanel"
+                          ? "bg-neon-amber/20 text-neon-amber shadow-sm"
+                          : "text-slate-400 hover:text-slate-200")
+                      }
+                    >
+                      CyberPanel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormType("manual")}
+                      className={
+                        "rounded-md px-4 py-1.5 text-sm font-medium transition-all " +
+                        (formType === "manual"
+                          ? "bg-neon-cyan/20 text-neon-cyan shadow-sm"
+                          : "text-slate-400 hover:text-slate-200")
+                      }
+                    >
+                      Manual
+                    </button>
                   </div>
                 </div>
 
+                {/* Plesk-specific fields */}
                 {formType === "plesk" && (
                   <>
                     <div>
@@ -570,6 +654,82 @@ export default function SharedHostingSettings() {
                   </>
                 )}
 
+                {/* CyberPanel-specific fields */}
+                {formType === "cyberpanel" && (
+                  <div className="rounded-lg border border-slate-700/50 bg-obsidian-800/50 p-4 space-y-4">
+                    <p className="text-sm font-medium text-slate-300">SSH Connection</p>
+
+                    {/* CyberPanel requirements note */}
+                    <div className="flex items-start gap-2 rounded-lg border border-slate-700/40 bg-slate-800/40 px-3 py-2.5 text-xs text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/40">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 dark:text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <span>Requires root or sudo-capable user with CyberPanel CLI access on the target server</span>
+                    </div>
+
+                    {/* SSH Key selector */}
+                    <div>
+                      <label className="mb-1.5 block text-sm text-slate-400">
+                        SSH Key
+                        <span className="ml-1 text-neon-rose">*</span>
+                      </label>
+                      <select
+                        className={selectClasses}
+                        value={formSshKeyId}
+                        onChange={(e) => setFormSshKeyId(e.target.value)}
+                        aria-label="SSH key"
+                        aria-required={true}
+                      >
+                        <option value="">Select SSH key</option>
+                        {sshKeys.map((k) => (
+                          <option key={k.id} value={k.id}>
+                            {k.name}
+                          </option>
+                        ))}
+                      </select>
+                      {sshKeys.length === 0 && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          No SSH keys found. Add one in Settings → Servers first.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* SSH User + Port */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1.5 block text-sm text-slate-400">SSH User</label>
+                        <input
+                          type="text"
+                          placeholder="root"
+                          value={formSshUser}
+                          onChange={(e) => setFormSshUser(e.target.value)}
+                          className={inputClasses}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-sm text-slate-400">SSH Port</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="22"
+                          value={formSshPort}
+                          onChange={(e) => setFormSshPort(e.target.value)}
+                          className={inputClasses}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Validation callout */}
+                    {!formSshKeyId && (
+                      <div className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber">
+                        Select an SSH key to enable CyberPanel sync
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex items-center gap-6">
                   <label className="flex items-center gap-2 text-sm text-slate-300">
                     <input
@@ -628,7 +788,12 @@ export default function SharedHostingSettings() {
                     >
                       Cancel
                     </button>
-                    <button type="submit" disabled={saving} className={primaryBtnClasses}>
+                    <button
+                      type="submit"
+                      disabled={saving || (formType === "cyberpanel" && !formSshKeyId)}
+                      title={formType === "cyberpanel" && !formSshKeyId ? "Select an SSH key to enable CyberPanel sync" : undefined}
+                      className={primaryBtnClasses}
+                    >
                       {saving ? "Saving..." : modalMode === "create" ? "Create Server" : "Save Changes"}
                     </button>
                   </div>
