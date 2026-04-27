@@ -78,6 +78,18 @@ function buildWrapperScript(opts: {
   // causing the installer to fail on unmodified Ubuntu hosts (EMS-44).
   // The script is piped to bash over the encrypted SSH channel (bash -s stdin),
   // never written to disk and never passed on argv, so this is safe.
+
+  // Bootstrap block: installs host prerequisites and clones the agent repo if
+  // absent. All steps are idempotent — safe to re-run on an already-prepared
+  // host. The docker.io block is emitted only for "agent" (Docker) mode at
+  // template-time so the generated script stays minimal per mode (EMS-45).
+  const dockerPrereqBlock =
+    opts.monitoringMode === "agent"
+      ? `ensure_apt_pkg docker.io
+sudo systemctl enable --now docker >/dev/null 2>&1 || true
+`
+      : "";
+
   return `#!/usr/bin/env bash
 set -euo pipefail
 
@@ -89,6 +101,31 @@ export AGENT_API_KEY=${shellSingleQuote(opts.apiKey)}
 export CENTRAL_API_URL=${JSON.stringify(opts.apiUrl)}
 export SERVER_NAME=${JSON.stringify(opts.serverName)}
 export REPORT_INTERVAL_SECONDS=${interval}
+
+echo ">>> Checking host prerequisites"
+
+APT_UPDATED=0
+ensure_apt_pkg() {
+  local pkg="$1"
+  if dpkg -s "$pkg" >/dev/null 2>&1; then return 0; fi
+  if [ "$APT_UPDATED" = "0" ]; then
+    sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+    APT_UPDATED=1
+  fi
+  echo ">>> Installing $pkg"
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$pkg"
+}
+
+ensure_apt_pkg ca-certificates
+ensure_apt_pkg curl
+ensure_apt_pkg git
+${dockerPrereqBlock}
+REPO_DIR=/opt/edgemonitoringagent/src
+if [ ! -d "$REPO_DIR/.git" ]; then
+  echo ">>> Cloning edgemonitoringagent into $REPO_DIR"
+  sudo mkdir -p /opt/edgemonitoringagent
+  sudo git clone --depth 50 https://github.com/${AGENT_REPO}.git "$REPO_DIR"
+fi
 
 echo ">>> Fetching ${scriptName} from edgemonitoringagent@${opts.tag}"
 curl -fsSL "https://raw.githubusercontent.com/${AGENT_REPO}/${opts.tag}/scripts/${scriptName}" \\
