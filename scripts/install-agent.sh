@@ -76,7 +76,16 @@ if docker compose version &>/dev/null; then
 elif command -v docker-compose &>/dev/null; then
   DC="docker-compose"
 else
-  echo "Error: docker compose is required but not installed."
+  cat <<'EOF' >&2
+Error: Docker is not installed on this host.
+
+To monitor this server without Docker, switch the server's
+Monitoring Mode in the Edge Monitoring dashboard to either:
+  - Linux Server (SSH)        — agentless polling, no install required
+  - Linux Agent (systemd)     — push-based, native install (coming soon)
+
+For Docker hosts, install Docker first: https://get.docker.com
+EOF
   exit 1
 fi
 
