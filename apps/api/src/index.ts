@@ -942,7 +942,7 @@ app.post("/admin/servers", async (req, reply) => {
       sshUser: z.string().min(1).optional(),
       sshPort: z.coerce.number().int().positive().optional(),
       sshKeyId: z.string().min(1).nullable().optional(),
-      monitoringMode: z.enum(["agent", "ssh", "cyberpanel"]).optional(),
+      monitoringMode: z.enum(["agent", "ssh", "cyberpanel", "agent_systemd"]).optional(),
       createAgentKey: z.boolean().optional()
     })
     .parse(req.body);
@@ -951,9 +951,11 @@ app.post("/admin/servers", async (req, reply) => {
   const resolvedMode = body.monitoringMode ?? "agent";
 
   // EMS-17: SSH and CyberPanel modes require a valid sshKeyId.
-  if (resolvedMode === "ssh" || resolvedMode === "cyberpanel") {
+  // EMS-41: agent_systemd also installs over SSH and therefore requires sshKeyId.
+  const requiresSshKey = ["ssh", "cyberpanel", "agent_systemd"].includes(resolvedMode);
+  if (requiresSshKey) {
     if (!body.sshKeyId) {
-      return reply.status(400).send({ error: "sshKeyId is required when monitoringMode is 'ssh' or 'cyberpanel'" });
+      return reply.status(400).send({ error: "sshKeyId is required when monitoringMode is 'ssh', 'cyberpanel', or 'agent_systemd'" });
     }
     const keyExists = await prisma.sshKey.findUnique({ where: { id: body.sshKeyId }, select: { id: true } });
     if (!keyExists) {
@@ -1019,7 +1021,7 @@ app.patch("/admin/servers/:id", async (req, reply) => {
       sshUser: z.string().min(1).nullable().optional(),
       sshPort: z.coerce.number().int().positive().nullable().optional(),
       sshKeyId: z.string().min(1).nullable().optional(),
-      monitoringMode: z.enum(["agent", "ssh", "cyberpanel"]).optional()
+      monitoringMode: z.enum(["agent", "ssh", "cyberpanel", "agent_systemd"]).optional()
     })
     .parse(req.body);
 
@@ -1027,12 +1029,14 @@ app.patch("/admin/servers/:id", async (req, reply) => {
   if (!existing) throw app.httpErrors.notFound("server-not-found");
 
   // EMS-17: resolve the effective mode and sshKeyId after the patch is applied.
+  // EMS-41: agent_systemd also installs over SSH and therefore requires sshKeyId.
   const resolvedMode = body.monitoringMode ?? existing.monitoringMode;
   const resolvedSshKeyId = body.sshKeyId !== undefined ? body.sshKeyId : existing.sshKeyId;
 
-  if (resolvedMode === "ssh" || resolvedMode === "cyberpanel") {
+  const requiresSshKey = ["ssh", "cyberpanel", "agent_systemd"].includes(resolvedMode);
+  if (requiresSshKey) {
     if (!resolvedSshKeyId) {
-      return reply.status(400).send({ error: "sshKeyId is required when monitoringMode is 'ssh' or 'cyberpanel'" });
+      return reply.status(400).send({ error: "sshKeyId is required when monitoringMode is 'ssh', 'cyberpanel', or 'agent_systemd'" });
     }
     const keyExists = await prisma.sshKey.findUnique({ where: { id: resolvedSshKeyId }, select: { id: true } });
     if (!keyExists) {
@@ -1438,27 +1442,12 @@ app.post("/admin/servers/:id/install-agent", async (req, reply) => {
     data: { apiKeyHash: newApiKeyHash }
   });
 
-  // --- 5b. Read agent install settings (registry credentials for docker pull) ---
-  // The settings row is a singleton and may not exist — that's fine, the
-  // installer falls back to no docker login (works for public images).
-  let registryCredentials: { registryUrl: string; username: string; token: string } | undefined;
-  const installSettings = await prisma.agentInstallSettings.findFirst();
-  if (
-    installSettings?.username &&
-    installSettings?.tokenEnc &&
-    installSettings?.tokenIv &&
-    installSettings?.tokenTag
-  ) {
-    const plainToken = decryptString(
-      { enc: installSettings.tokenEnc, iv: installSettings.tokenIv, tag: installSettings.tokenTag },
-      env.SSH_KEY_MASTER_SECRET
-    );
-    registryCredentials = {
-      registryUrl: installSettings.registryUrl,
-      username: installSettings.username,
-      token: plainToken
-    };
-  }
+  // --- 5b. Resolve monitoring mode for installer ---
+  // Map server's monitoringMode to the installer's accepted union.
+  // "agent" and "agent_systemd" map directly; any other mode (ssh, cyberpanel)
+  // is treated as "agent" since those modes don't use this installer path.
+  const installerMode: "agent" | "agent_systemd" =
+    server.monitoringMode === "agent_systemd" ? "agent_systemd" : "agent";
 
   // --- 6 + 7 + 8 + 9 + 10 + 11 + 12. SSH install (all phases handled inside) ---
   await installAgentOverSsh(
@@ -1471,8 +1460,8 @@ app.post("/admin/servers/:id/install-agent", async (req, reply) => {
       apiUrl: env.PUBLIC_API_URL,
       apiKey: plainApiKey,
       serverName: server.name,
+      monitoringMode: installerMode,
       timeoutMs: 5 * 60 * 1000,
-      registryCredentials
     },
     emit
   );

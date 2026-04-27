@@ -48,6 +48,7 @@ function isAdminRoute(method: string, url: string): boolean {
   // EMS-17: confirmed admin classification for monitoringMode + sshKeyId surface
   // EMS-18: confirmed admin classification for SSH test endpoint
   // EMS-24: confirmed admin classification for SharedHostingServer CyberPanel CRUD surface
+  // EMS-41: confirmed admin classification for agent_systemd monitoringMode value
   return path === "/admin" || path.startsWith("/admin/");
 }
 

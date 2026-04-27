@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# DEPRECATED: The dashboard now uses scripts/deploy-ubuntu.sh from edgemonitoringagent.
+# This standalone copy is kept for users who run installations manually.
 set -euo pipefail
 
 # Edge Monitoring Agent — one-liner installer

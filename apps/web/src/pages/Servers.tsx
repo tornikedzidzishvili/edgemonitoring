@@ -125,13 +125,13 @@ export default function Servers() {
         sshPort: serverSshPort ? Number(serverSshPort) : undefined,
         sshKeyId: serverSshKeyId || undefined,
         monitoringMode: serverMonitoringMode,
-        createAgentKey: serverMonitoringMode === "agent" ? serverCreateAgentKey : false
+        createAgentKey: (serverMonitoringMode === "agent" || serverMonitoringMode === "agent_systemd") ? serverCreateAgentKey : false
       });
       if (created.apiKey) {
         setAgentKeyOnce({ serverId: created.server.id, apiKey: created.apiKey });
       }
-      // EMS-35: auto-open InstallAgentModal on create when mode is agent
-      if (modeAtSubmit === "agent") {
+      // EMS-35/EMS-42: auto-open InstallAgentModal on create when mode is agent or agent_systemd
+      if (modeAtSubmit === "agent" || modeAtSubmit === "agent_systemd") {
         setInstallTarget({ id: created.server.id, name: created.server.name });
       }
       setServerName("");
@@ -483,6 +483,18 @@ REPORT_INTERVAL_SECONDS=5`}
               </button>
               <button
                 type="button"
+                onClick={() => setServerMonitoringMode("agent_systemd")}
+                className={
+                  "rounded-md px-4 py-1.5 text-sm font-medium transition-all " +
+                  (serverMonitoringMode === "agent_systemd"
+                    ? "bg-neon-cyan/20 text-neon-cyan shadow-sm"
+                    : "text-slate-400 hover:text-slate-200")
+                }
+              >
+                Linux Agent (systemd)
+              </button>
+              <button
+                type="button"
                 onClick={() => setServerMonitoringMode("ssh")}
                 className={
                   "rounded-md px-4 py-1.5 text-sm font-medium transition-all " +
@@ -520,16 +532,16 @@ REPORT_INTERVAL_SECONDS=5`}
           {/* SSH key selector */}
           <label className="block md:col-span-2">
             <div className={labelClasses}>
-              SSH key{serverMonitoringMode === "ssh" ? <span className="ml-1 text-neon-rose">*</span> : null}
+              SSH key{(serverMonitoringMode === "ssh" || serverMonitoringMode === "agent_systemd") ? <span className="ml-1 text-neon-rose">*</span> : null}
             </div>
             <select
               className={inputClasses + " mt-1.5"}
               value={serverSshKeyId}
               onChange={(e) => setServerSshKeyId(e.target.value)}
               aria-label="SSH key"
-              aria-required={serverMonitoringMode === "ssh"}
+              aria-required={serverMonitoringMode === "ssh" || serverMonitoringMode === "agent_systemd"}
             >
-              <option value="">{serverMonitoringMode === "ssh" ? "Select SSH key" : "(optional) Select SSH key"}</option>
+              <option value="">{(serverMonitoringMode === "ssh" || serverMonitoringMode === "agent_systemd") ? "Select SSH key" : "(optional) Select SSH key"}</option>
               {sshKeyOptions.map((k) => (
                 <option key={k.id} value={k.id}>
                   {k.name}
@@ -539,8 +551,8 @@ REPORT_INTERVAL_SECONDS=5`}
             <div className="mt-1.5 text-xs text-slate-500">Click "Load SSH keys" above if empty.</div>
           </label>
 
-          {/* SSH mode — link to key upload */}
-          {serverMonitoringMode === "ssh" ? (
+          {/* SSH / agent_systemd mode — link to key upload */}
+          {(serverMonitoringMode === "ssh" || serverMonitoringMode === "agent_systemd") ? (
             <div className="md:col-span-2 flex items-start gap-2 rounded-lg border border-slate-700/40 bg-slate-800/40 px-3 py-2.5 text-xs text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/40">
               <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 dark:text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
@@ -557,7 +569,7 @@ REPORT_INTERVAL_SECONDS=5`}
             </div>
           ) : null}
 
-          {/* EMS-36: CyberPanel dual-purpose hint */}
+          {/* EMS-36: SSH mode hint (updated copy) */}
           {serverMonitoringMode === "ssh" ? (
             <div className="md:col-span-4 flex items-start gap-2 rounded-lg border border-slate-700/40 bg-slate-800/40 px-3 py-2.5 text-xs text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/40">
               <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 dark:text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -566,7 +578,7 @@ REPORT_INTERVAL_SECONDS=5`}
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               <span>
-                Use this for any Linux server, including CyberPanel hosts. For CyberPanel website and SSL inventory, also add it under{" "}
+                Linux Server (SSH) is agentless polling over SSH (no install). For higher-fidelity push-based metrics, use Linux Agent (systemd) instead. For CyberPanel website and SSL inventory, also add it under{" "}
                 <Link to="/settings" className="font-medium text-slate-300 underline underline-offset-2 hover:text-white dark:text-slate-300 dark:hover:text-white">
                   Shared Hosting
                 </Link>.
@@ -574,14 +586,20 @@ REPORT_INTERVAL_SECONDS=5`}
             </div>
           ) : null}
 
+          {/* Validation callout — adapts copy per mode */}
           {serverMonitoringMode === "ssh" && !serverSshKeyId ? (
-            <div className="md:col-span-4 rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber">
+            <div className="md:col-span-4 rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber dark:border-neon-amber/30 dark:bg-neon-amber/10">
               Select an SSH key to use SSH polling
             </div>
           ) : null}
+          {serverMonitoringMode === "agent_systemd" && !serverSshKeyId ? (
+            <div className="md:col-span-4 rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber dark:border-neon-amber/30 dark:bg-neon-amber/10">
+              Select an SSH key to install the Linux Agent
+            </div>
+          ) : null}
 
-          {/* Test Connection — disabled in create mode (no server ID yet) */}
-          {serverMonitoringMode === "ssh" ? (
+          {/* Test Connection — disabled in create mode (no server ID yet); shown for ssh and agent_systemd */}
+          {(serverMonitoringMode === "ssh" || serverMonitoringMode === "agent_systemd") ? (
             <div className="md:col-span-4 flex items-center gap-2">
               <button
                 type="button"
@@ -595,8 +613,8 @@ REPORT_INTERVAL_SECONDS=5`}
             </div>
           ) : null}
 
-          {/* Agent-mode only options */}
-          {serverMonitoringMode === "agent" ? (
+          {/* Agent-mode options (both docker and systemd push-based modes) */}
+          {(serverMonitoringMode === "agent" || serverMonitoringMode === "agent_systemd") ? (
             <>
               <label className="flex items-center gap-3 md:col-span-4">
                 <input
@@ -622,9 +640,19 @@ REPORT_INTERVAL_SECONDS=5`}
           <div className="md:col-span-4">
             <button
               type="submit"
-              disabled={creatingServer || (serverMonitoringMode === "ssh" && !serverSshKeyId)}
+              disabled={
+                creatingServer ||
+                (serverMonitoringMode === "ssh" && !serverSshKeyId) ||
+                (serverMonitoringMode === "agent_systemd" && !serverSshKeyId)
+              }
               className={primaryBtnClasses}
-              title={serverMonitoringMode === "ssh" && !serverSshKeyId ? "Select an SSH key to use SSH polling" : undefined}
+              title={
+                serverMonitoringMode === "ssh" && !serverSshKeyId
+                  ? "Select an SSH key to use SSH polling"
+                  : serverMonitoringMode === "agent_systemd" && !serverSshKeyId
+                  ? "Select an SSH key to install the Linux Agent"
+                  : undefined
+              }
             >
               {creatingServer ? "Adding..." : "Add server"}
             </button>
@@ -704,9 +732,9 @@ REPORT_INTERVAL_SECONDS=5`}
                         value={editSshKeyId}
                         onChange={(e) => setEditSshKeyId(e.target.value)}
                         aria-label="SSH key"
-                        aria-required={editMonitoringMode === "ssh"}
+                        aria-required={editMonitoringMode === "ssh" || editMonitoringMode === "agent_systemd"}
                       >
-                        <option value="">{editMonitoringMode === "ssh" ? "Select SSH key" : "(none)"}</option>
+                        <option value="">{(editMonitoringMode === "ssh" || editMonitoringMode === "agent_systemd") ? "Select SSH key" : "(none)"}</option>
                         {sshKeyOptions.map((k) => (
                           <option key={k.id} value={k.id}>
                             {k.name}
@@ -759,7 +787,19 @@ REPORT_INTERVAL_SECONDS=5`}
                                   : "text-slate-400 hover:text-slate-200")
                               }
                             >
-                              Agent
+                              Docker
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditMonitoringMode("agent_systemd")}
+                              className={
+                                "rounded-md px-3 py-1 text-xs font-medium transition-all " +
+                                (editMonitoringMode === "agent_systemd"
+                                  ? "bg-neon-cyan/20 text-neon-cyan shadow-sm"
+                                  : "text-slate-400 hover:text-slate-200")
+                              }
+                            >
+                              Systemd
                             </button>
                             <button
                               type="button"
@@ -793,8 +833,8 @@ REPORT_INTERVAL_SECONDS=5`}
                           />
                         </div>
 
-                        {/* Agent-mode extras */}
-                        {editMonitoringMode === "agent" ? (
+                        {/* Agent-mode extras (docker and systemd push-based modes) */}
+                        {(editMonitoringMode === "agent" || editMonitoringMode === "agent_systemd") ? (
                           <>
                             <label className="flex items-center gap-2">
                               <input
@@ -817,8 +857,8 @@ REPORT_INTERVAL_SECONDS=5`}
                           </>
                         ) : null}
 
-                        {/* SSH-mode: Test Connection */}
-                        {editMonitoringMode === "ssh" ? (
+                        {/* SSH / agent_systemd: Test Connection */}
+                        {(editMonitoringMode === "ssh" || editMonitoringMode === "agent_systemd") ? (
                           <div className="space-y-1.5">
                             {/* Info callout — link to SSH key management */}
                             <div className="flex items-start gap-1.5 rounded-lg border border-slate-700/40 bg-slate-800/40 px-2.5 py-2 text-xs text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/40">
@@ -835,10 +875,15 @@ REPORT_INTERVAL_SECONDS=5`}
                                 first
                               </span>
                             </div>
-                            {/* Validation hint when no SSH key is selected */}
-                            {!editSshKeyId ? (
-                              <div className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-2.5 py-1.5 text-xs text-neon-amber">
+                            {/* Validation hint when no SSH key is selected — copy adapts to mode */}
+                            {!editSshKeyId && editMonitoringMode === "ssh" ? (
+                              <div className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-2.5 py-1.5 text-xs text-neon-amber dark:border-neon-amber/30 dark:bg-neon-amber/10">
                                 Select an SSH key to use SSH polling
+                              </div>
+                            ) : null}
+                            {!editSshKeyId && editMonitoringMode === "agent_systemd" ? (
+                              <div className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-2.5 py-1.5 text-xs text-neon-amber dark:border-neon-amber/30 dark:bg-neon-amber/10">
+                                Select an SSH key to install the Linux Agent
                               </div>
                             ) : null}
                             <div className="flex items-center gap-2 flex-wrap">
@@ -881,8 +926,18 @@ REPORT_INTERVAL_SECONDS=5`}
                           <button
                             type="button"
                             onClick={() => onSaveEdit()}
-                            disabled={savingServerId === s.id || (editMonitoringMode === "ssh" && !editSshKeyId)}
-                            title={editMonitoringMode === "ssh" && !editSshKeyId ? "Select an SSH key to use SSH polling" : undefined}
+                            disabled={
+                              savingServerId === s.id ||
+                              (editMonitoringMode === "ssh" && !editSshKeyId) ||
+                              (editMonitoringMode === "agent_systemd" && !editSshKeyId)
+                            }
+                            title={
+                              editMonitoringMode === "ssh" && !editSshKeyId
+                                ? "Select an SSH key to use SSH polling"
+                                : editMonitoringMode === "agent_systemd" && !editSshKeyId
+                                ? "Select an SSH key to install the Linux Agent"
+                                : undefined
+                            }
                             className="rounded-lg bg-neon-emerald/20 px-3 py-1.5 text-xs font-medium text-neon-emerald transition-all hover:bg-neon-emerald/30 disabled:opacity-60"
                           >
                             {savingServerId === s.id ? "Saving..." : "Save"}

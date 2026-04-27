@@ -33,7 +33,7 @@ export type UptimePoint = {
   error: string | null;
 };
 
-export type MonitoringMode = "agent" | "ssh" | "cyberpanel";
+export type MonitoringMode = "agent" | "agent_systemd" | "ssh" | "cyberpanel";
 
 export type ServerInfo = {
   id: string;

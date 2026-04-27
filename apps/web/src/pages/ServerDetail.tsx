@@ -430,6 +430,7 @@ export default function ServerDetailPage() {
   const isActive = detail?.lastSeenAt ? Date.now() - new Date(detail.lastSeenAt).getTime() < 5 * 60 * 1000 : false;
   const uptimeMs = detail?.createdAt ? Date.now() - new Date(detail.createdAt).getTime() : 0;
   const isSSH = detail?.monitoringMode === "ssh";
+  const isAgentSystemd = detail?.monitoringMode === "agent_systemd";
   const sshStale = isSSH && (
     !detail?.lastSeenAt || Date.now() - new Date(detail.lastSeenAt).getTime() > 3 * 60 * 1000
   );
@@ -551,6 +552,16 @@ export default function ServerDetailPage() {
                   <line x1="8" y1="12" x2="16" y2="12" />
                 </svg>
                 SSH Polling
+              </span>
+            ) : isAgentSystemd ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-500/30 bg-slate-500/10 px-2.5 py-1 text-xs font-medium text-slate-400 dark:border-slate-500/30 dark:bg-slate-500/10 dark:text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                  <line x1="6" y1="6" x2="6.01" y2="6" />
+                  <line x1="6" y1="18" x2="6.01" y2="18" />
+                </svg>
+                Linux Agent
               </span>
             ) : (
               (() => {
@@ -1077,7 +1088,7 @@ export default function ServerDetailPage() {
         </div>
       )}
 
-      {showInstallModal && detail && !isSSH ? (
+      {showInstallModal && detail && !isSSH && !isAgentSystemd ? (
         <InstallAgentModal
           serverId={serverId}
           serverName={detail.name}
