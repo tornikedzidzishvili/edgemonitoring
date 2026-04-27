@@ -745,6 +745,18 @@ export default function SharedHostingSettings() {
                       </div>
                     </div>
 
+                    {/* EMS-36: dual-purpose onboarding hint */}
+                    <div className="flex items-start gap-2 rounded-lg border border-slate-700/40 bg-slate-800/40 px-3 py-2.5 text-xs text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/40">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 dark:text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <span>
+                        This syncs website, SSL, and service health. To also monitor CPU/memory/disk for this host, add it separately under Servers using Linux Server (SSH) mode.
+                      </span>
+                    </div>
+
                     {/* Validation callouts */}
                     {!formSshHost.trim() && (
                       <div className="rounded-lg border border-neon-amber/30 bg-neon-amber/10 px-3 py-2 text-xs text-neon-amber">

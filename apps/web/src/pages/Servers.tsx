@@ -113,6 +113,8 @@ export default function Servers() {
     e.preventDefault();
     setError(null);
     setCreatingServer(true);
+    // Capture before state reset so we can use it after awaiting
+    const modeAtSubmit = serverMonitoringMode;
     try {
       const created = await api.adminCreateServer({
         name: serverName,
@@ -127,6 +129,10 @@ export default function Servers() {
       });
       if (created.apiKey) {
         setAgentKeyOnce({ serverId: created.server.id, apiKey: created.apiKey });
+      }
+      // EMS-35: auto-open InstallAgentModal on create when mode is agent
+      if (modeAtSubmit === "agent") {
+        setInstallTarget({ id: created.server.id, name: created.server.name });
       }
       setServerName("");
       setServerIp("");
@@ -473,7 +479,7 @@ REPORT_INTERVAL_SECONDS=5`}
                     : "text-slate-400 hover:text-slate-200")
                 }
               >
-                Agent (installed)
+                Docker Agent
               </button>
               <button
                 type="button"
@@ -485,7 +491,7 @@ REPORT_INTERVAL_SECONDS=5`}
                     : "text-slate-400 hover:text-slate-200")
                 }
               >
-                SSH (agentless)
+                Linux Server (SSH)
               </button>
             </div>
           </div>
@@ -547,6 +553,23 @@ REPORT_INTERVAL_SECONDS=5`}
                   Settings &gt; SSH Keys
                 </Link>{" "}
                 first
+              </span>
+            </div>
+          ) : null}
+
+          {/* EMS-36: CyberPanel dual-purpose hint */}
+          {serverMonitoringMode === "ssh" ? (
+            <div className="md:col-span-4 flex items-start gap-2 rounded-lg border border-slate-700/40 bg-slate-800/40 px-3 py-2.5 text-xs text-slate-400 dark:border-slate-700/40 dark:bg-slate-800/40">
+              <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500 dark:text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <span>
+                Use this for any Linux server, including CyberPanel hosts. For CyberPanel website and SSL inventory, also add it under{" "}
+                <Link to="/settings" className="font-medium text-slate-300 underline underline-offset-2 hover:text-white dark:text-slate-300 dark:hover:text-white">
+                  Shared Hosting
+                </Link>.
               </span>
             </div>
           ) : null}
