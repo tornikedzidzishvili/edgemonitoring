@@ -1,5 +1,33 @@
+import fs from "node:fs";
 import Docker, { type ContainerInfo } from "dockerode";
 import * as si from "systeminformation";
+
+// ---------------------------------------------------------------------------
+// Docker availability — checked ONCE at module load time.
+//
+// When the agent runs on a host without Docker (e.g. a bare systemd-service
+// deployment), /var/run/docker.sock is absent and every attempt to open it
+// would throw. We detect this once and skip Docker collection entirely for the
+// lifetime of the process, emitting a single warning rather than per-cycle
+// noise. Docker-present behaviour is byte-for-byte unchanged.
+// ---------------------------------------------------------------------------
+const DOCKER_SOCK = "/var/run/docker.sock";
+
+export const DOCKER_AVAILABLE: boolean = (() => {
+  try {
+    fs.accessSync(DOCKER_SOCK, fs.constants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+if (!DOCKER_AVAILABLE) {
+  console.warn(
+    `[agent] Docker socket not found at ${DOCKER_SOCK}. ` +
+      `Container stats will be skipped. CPU/mem/disk/network metrics will be collected normally.`
+  );
+}
 
 export type AgentPayload = {
   collectedAt: string;
@@ -28,6 +56,9 @@ export type AgentPayload = {
     // Legacy field (kept for safety during rollout)
     topProcesses?: Array<{ pid: number; name: string; cpu: number; mem: number }>;
   };
+  // null when Docker is unavailable on this host; populated object when Docker
+  // is reachable. The API ingest handler stores payload as a raw JSON blob
+  // (z.unknown()) so null is safe on the wire.
   docker: {
     containers: Array<{
       id: string;
@@ -51,7 +82,7 @@ export type AgentPayload = {
       blockWriteBytes?: number;
     }>;
     error?: string;
-  };
+  } | null;
 };
 
 type DockerStats = any;
@@ -176,54 +207,72 @@ export async function collectSnapshot(dockerSocketPath: string): Promise<AgentPa
         .map((p) => ({ pid: p.pid, name: p.name, cpu: p.cpu, mem: p.mem }))
     : undefined;
 
-  let containers: AgentPayload["docker"]["containers"] = [];
-  let dockerStats: AgentPayload["docker"]["stats"] = undefined;
-  let dockerError: string | undefined;
+  // ---------------------------------------------------------------------------
+  // Docker collection — only attempted when DOCKER_AVAILABLE is true.
+  //
+  // If Docker was present at startup but the socket disappears mid-runtime
+  // (e.g. dockerd restart), the inner try/catch absorbs the error and returns
+  // null for this cycle with no log output — DOCKER_AVAILABLE stays true so
+  // the next cycle will retry naturally.
+  // ---------------------------------------------------------------------------
+  let dockerPayload: AgentPayload["docker"];
 
-  try {
-    const docker = new Docker({ socketPath: dockerSocketPath });
-    const dockerContainers = await docker.listContainers({ all: true });
-    containers = (dockerContainers as ContainerInfo[]).map((c) => ({
-      id: c.Id,
-      name: Array.isArray(c.Names) && c.Names.length ? c.Names[0].replace(/^\//, "") : c.Id.slice(0, 12),
-      image: c.Image,
-      state: c.State,
-      status: c.Status,
-      created: c.Created,
-      ports: (c.Ports ?? []).map((p) => {
-        const hp = p.PublicPort ? `${p.IP ?? "0.0.0.0"}:${p.PublicPort}` : "";
-        const cp = `${p.PrivatePort}/${p.Type}`;
-        return hp ? `${hp} -> ${cp}` : cp;
-      })
-    }));
+  if (!DOCKER_AVAILABLE) {
+    // Docker not present on this host — skip silently every cycle.
+    dockerPayload = null;
+  } else {
+    let containers: NonNullable<AgentPayload["docker"]>["containers"] = [];
+    let dockerStats: NonNullable<AgentPayload["docker"]>["stats"] = undefined;
+    let dockerError: string | undefined;
 
-    dockerStats = await Promise.all(
-      containers.map(async (c) => {
-        try {
-          const s = await docker.getContainer(c.id).stats({ stream: false });
-          const cpuPercent = computeCpuPercent(s);
-          const mem = computeMem(s);
-          const net = computeNet(s);
-          const blk = computeBlock(s);
-          return {
-            id: c.id,
-            name: c.name,
-            cpuPercent,
-            memUsageBytes: mem.usage,
-            memLimitBytes: mem.limit,
-            memPercent: mem.percent,
-            netRxBytes: net.rx,
-            netTxBytes: net.tx,
-            blockReadBytes: blk.read,
-            blockWriteBytes: blk.write
-          };
-        } catch {
-          return { id: c.id, name: c.name };
-        }
-      })
-    );
-  } catch (e) {
-    dockerError = e instanceof Error ? e.message : "docker-collect-failed";
+    try {
+      const docker = new Docker({ socketPath: dockerSocketPath });
+      const dockerContainers = await docker.listContainers({ all: true });
+      containers = (dockerContainers as ContainerInfo[]).map((c) => ({
+        id: c.Id,
+        name: Array.isArray(c.Names) && c.Names.length ? c.Names[0].replace(/^\//, "") : c.Id.slice(0, 12),
+        image: c.Image,
+        state: c.State,
+        status: c.Status,
+        created: c.Created,
+        ports: (c.Ports ?? []).map((p) => {
+          const hp = p.PublicPort ? `${p.IP ?? "0.0.0.0"}:${p.PublicPort}` : "";
+          const cp = `${p.PrivatePort}/${p.Type}`;
+          return hp ? `${hp} -> ${cp}` : cp;
+        })
+      }));
+
+      dockerStats = await Promise.all(
+        containers.map(async (c) => {
+          try {
+            const s = await docker.getContainer(c.id).stats({ stream: false });
+            const cpuPercent = computeCpuPercent(s);
+            const mem = computeMem(s);
+            const net = computeNet(s);
+            const blk = computeBlock(s);
+            return {
+              id: c.id,
+              name: c.name,
+              cpuPercent,
+              memUsageBytes: mem.usage,
+              memLimitBytes: mem.limit,
+              memPercent: mem.percent,
+              netRxBytes: net.rx,
+              netTxBytes: net.tx,
+              blockReadBytes: blk.read,
+              blockWriteBytes: blk.write
+            };
+          } catch {
+            return { id: c.id, name: c.name };
+          }
+        })
+      );
+    } catch (e) {
+      // Docker socket disappeared mid-runtime (rare) — skip this cycle silently.
+      dockerError = e instanceof Error ? e.message : "docker-collect-failed";
+    }
+
+    dockerPayload = { containers, stats: dockerStats, error: dockerError };
   }
 
   return {
@@ -256,10 +305,6 @@ export async function collectSnapshot(dockerSocketPath: string): Promise<AgentPa
       ...(processesTop ? { processesTop } : {}),
       ...(topProcesses ? { topProcesses } : {})
     },
-    docker: {
-      containers,
-      stats: dockerStats,
-      error: dockerError
-    }
+    docker: dockerPayload
   };
 }

@@ -7,11 +7,13 @@ datasource db {
 }
 
 // How a server's metrics are collected.
-// agent     — Dockerized agent pushes data (original path).
-// ssh       — Platform polls the server over SSH (agentless).
-// cyberpanel — Platform reads inventory from a CyberPanel API (shared hosting).
+// agent          — Dockerized agent pushes data (original path).
+// agent_systemd  — Native systemd agent pushes data (no Docker required).
+// ssh            — Platform polls the server over SSH (agentless).
+// cyberpanel     — Platform reads inventory from a CyberPanel API (shared hosting).
 enum MonitoringMode {
   agent
+  agent_systemd
   ssh
   cyberpanel
 }
