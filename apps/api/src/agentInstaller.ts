@@ -81,11 +81,18 @@ function buildWrapperScript(opts: {
 
   // Bootstrap block: installs host prerequisites and clones the agent repo if
   // absent. All steps are idempotent — safe to re-run on an already-prepared
-  // host. The docker.io block is emitted only for "agent" (Docker) mode at
+  // host. The docker block is emitted only for "agent" (Docker) mode at
   // template-time so the generated script stays minimal per mode (EMS-45).
+  // Uses get.docker.com (Docker Inc. official installer) rather than the
+  // Ubuntu stock docker.io package — handles conflicts with pre-existing docker
+  // remnants (docker-ce, held containerd packages, etc.) that cause apt to fail
+  // with "pkgProblemResolver::Resolve generated breaks" on real-world VPS hosts.
   const dockerPrereqBlock =
     opts.monitoringMode === "agent"
-      ? `ensure_apt_pkg docker.io
+      ? `if ! command -v docker >/dev/null 2>&1; then
+  echo ">>> Installing Docker via Docker Inc. official script (get.docker.com)"
+  curl -fsSL https://get.docker.com | sudo sh
+fi
 sudo systemctl enable --now docker >/dev/null 2>&1 || true
 `
       : "";
