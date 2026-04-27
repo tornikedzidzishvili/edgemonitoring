@@ -48,8 +48,23 @@ export async function getLatestAgentTag(): Promise<string> {
   }
 }
 
+/**
+ * Wraps a string in single quotes for safe shell embedding.
+ * Any embedded single quotes are escaped via the '"'"' technique
+ * (close quote, literal single quote, reopen quote).
+ *
+ * Example: shell's own quote → 'shell'"'"'s own quote'
+ *
+ * This is defense-in-depth even though generateApiKey() produces URL-safe
+ * base64 characters — never assume a caller's input is free of special chars.
+ */
+function shellSingleQuote(s: string): string {
+  return "'" + s.replaceAll("'", "'\\''") + "'";
+}
+
 function buildWrapperScript(opts: {
   monitoringMode: "agent" | "agent_systemd";
+  apiKey: string;
   apiUrl: string;
   serverName: string;
   tag: string;
@@ -57,9 +72,12 @@ function buildWrapperScript(opts: {
 }): string {
   const scriptName = opts.monitoringMode === "agent" ? "deploy-ubuntu.sh" : "deploy-cyberpanel.sh";
   const interval = opts.reportIntervalSeconds ?? 30;
-  // AGENT_API_KEY is NOT in the script body — it is delivered via the SSH exec
-  // channel env (see conn.exec options). The `export AGENT_API_KEY` line below
-  // re-exports it so child processes (sudo -E bash) inherit it.
+  // AGENT_API_KEY is injected directly into the script body as a single-quoted
+  // shell literal. Delivery via the SSH exec-channel env option was silently
+  // dropped by stock sshd (AcceptEnv whitelist defaults to LANG/LC_* only),
+  // causing the installer to fail on unmodified Ubuntu hosts (EMS-44).
+  // The script is piped to bash over the encrypted SSH channel (bash -s stdin),
+  // never written to disk and never passed on argv, so this is safe.
   return `#!/usr/bin/env bash
 set -euo pipefail
 
@@ -67,7 +85,7 @@ set -euo pipefail
 # Fetches and runs ${scriptName} from edgemonitoringagent at tag ${opts.tag}
 # Generated at ${new Date().toISOString()}
 
-export AGENT_API_KEY  # provided by SSH session env
+export AGENT_API_KEY=${shellSingleQuote(opts.apiKey)}
 export CENTRAL_API_URL=${JSON.stringify(opts.apiUrl)}
 export SERVER_NAME=${JSON.stringify(opts.serverName)}
 export REPORT_INTERVAL_SECONDS=${interval}
@@ -139,9 +157,11 @@ function makeLineBuffer(onLine: (line: string) => void): {
  * Connects via SSH, rotates the server's agent API key, then pipes the wrapper
  * script to `bash -s` stdin.
  *
- * AGENT_API_KEY is delivered via the ssh2 exec-channel `env` option — never in
- * argv, never in the script body — keeping it out of `ps -ef` and bash tracing.
- * safeEmit scrubs it from all NDJSON lines as a defense-in-depth backstop.
+ * AGENT_API_KEY is embedded as a single-quoted shell literal in the wrapper
+ * script body (see buildWrapperScript / shellSingleQuote). The script is piped
+ * over the encrypted SSH channel — never written to disk, never passed on argv,
+ * keeping it out of `ps -ef`. safeEmit scrubs it from all NDJSON lines as a
+ * defense-in-depth backstop.
  */
 export async function installAgentOverSsh(
   params: InstallAgentParams,
@@ -193,6 +213,7 @@ export async function installAgentOverSsh(
     const tag = await getLatestAgentTag();
     const wrapperScript = buildWrapperScript({
       monitoringMode: params.monitoringMode,
+      apiKey: params.apiKey,
       apiUrl: params.apiUrl,
       serverName: params.serverName,
       tag,
@@ -203,9 +224,11 @@ export async function installAgentOverSsh(
     emitStatus("running-installer", `Fetching and running installer wrapper (tag ${tag}) via bash stdin`);
 
     return new Promise<InstallAgentResult>((resolve, reject) => {
-      // AGENT_API_KEY is set here on the exec-channel env — not in the script body,
-      // not on argv. Line 284 below is the single point where the key touches the wire.
-      conn.exec("bash -s", { pty: false, env: { AGENT_API_KEY: params.apiKey } }, (err, stream) => {
+      // AGENT_API_KEY is embedded in the wrapper script body (see buildWrapperScript).
+      // The script is delivered over the encrypted SSH channel via bash stdin — never
+      // written to disk, never on argv. The env-channel approach was dropped because
+      // stock sshd silently ignores client-sent env vars not in AcceptEnv (EMS-44).
+      conn.exec("bash -s", { pty: false }, (err, stream) => {
         if (err) { reject(err); return; }
 
         const stdoutBuf = makeLineBuffer((line) => emitLog("stdout", line));
