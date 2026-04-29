@@ -611,90 +611,99 @@ export default function ServerDetailPage() {
       ) : null}
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* CPU Load */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0 }}
-          className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-cyan/10">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="4" y="4" width="16" height="16" rx="2" />
-                <rect x="9" y="9" width="6" height="6" />
-                <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
-              </svg>
-            </div>
-            <span className="text-sm font-medium text-slate-400">CPU Load</span>
-          </div>
-          <div className="mt-3 text-3xl font-bold text-white">{latestSnap?.cpuLoad !== undefined ? `${latestSnap.cpuLoad.toFixed(1)}%` : "—"}</div>
-          <div className="mt-1 text-xs text-slate-500">Current load average</div>
-        </motion.div>
+      {/* When Docker is not applicable (SSH mode or agent_systemd without Docker), omit the Containers
+          card and collapse the grid from 4 columns to 3 so the remaining cards fill the row evenly. */}
+      {(() => {
+        const hideContainers = isSSH || (isAgentSystemd && !monitorDocker);
+        return (
+          <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${hideContainers ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
+            {/* CPU Load */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0 }}
+              className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-cyan/10">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                    <rect x="9" y="9" width="6" height="6" />
+                    <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" />
+                  </svg>
+                </div>
+                <span className="text-sm font-medium text-slate-400">CPU Load</span>
+              </div>
+              <div className="mt-3 text-3xl font-bold text-white">{latestSnap?.cpuLoad !== undefined ? `${latestSnap.cpuLoad.toFixed(1)}%` : "—"}</div>
+              <div className="mt-1 text-xs text-slate-500">Current load average</div>
+            </motion.div>
 
-        {/* Memory */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-violet/10">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-violet" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6 19v-3M10 19v-3M14 19v-3M18 19v-3M6 8v-3M10 8v-3M14 8v-3M18 8v-3" />
-                <rect x="3" y="8" width="18" height="8" rx="1" />
-              </svg>
-            </div>
-            <span className="text-sm font-medium text-slate-400">Memory</span>
-          </div>
-          <div className="mt-3 text-3xl font-bold text-white">{latestSnap?.memUsed !== undefined && latestSnap?.memTotal !== undefined && latestSnap.memTotal > 0 ? `${((latestSnap.memUsed / latestSnap.memTotal) * 100).toFixed(1)}%` : "—"}</div>
-          <div className="mt-1 text-xs text-slate-500">{formatBytes(latestSnap?.memUsed)} / {formatBytes(latestSnap?.memTotal)}</div>
-        </motion.div>
+            {/* Memory */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 }}
+              className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-violet/10">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-violet" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 19v-3M10 19v-3M14 19v-3M18 19v-3M6 8v-3M10 8v-3M14 8v-3M18 8v-3" />
+                    <rect x="3" y="8" width="18" height="8" rx="1" />
+                  </svg>
+                </div>
+                <span className="text-sm font-medium text-slate-400">Memory</span>
+              </div>
+              <div className="mt-3 text-3xl font-bold text-white">{latestSnap?.memUsed !== undefined && latestSnap?.memTotal !== undefined && latestSnap.memTotal > 0 ? `${((latestSnap.memUsed / latestSnap.memTotal) * 100).toFixed(1)}%` : "—"}</div>
+              <div className="mt-1 text-xs text-slate-500">{formatBytes(latestSnap?.memUsed)} / {formatBytes(latestSnap?.memTotal)}</div>
+            </motion.div>
 
-        {/* Endpoints */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-emerald/10">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-              </svg>
-            </div>
-            <span className="text-sm font-medium text-slate-400">Endpoints</span>
-          </div>
-          <div className="mt-3 text-3xl font-bold text-white">{endpoints.length}</div>
-          <div className="mt-1 text-xs text-slate-500">{endpoints.filter((e) => e.lastCheck?.ok).length} up</div>
-        </motion.div>
+            {/* Endpoints */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-emerald/10">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="2" y1="12" x2="22" y2="12" />
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  </svg>
+                </div>
+                <span className="text-sm font-medium text-slate-400">Endpoints</span>
+              </div>
+              <div className="mt-3 text-3xl font-bold text-white">{endpoints.length}</div>
+              <div className="mt-1 text-xs text-slate-500">{endpoints.filter((e) => e.lastCheck?.ok).length} up</div>
+            </motion.div>
 
-        {/* Containers */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-amber/10">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 12.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h7.5" />
-                <path d="M18 14v4h4M18 18l4 4" />
-                <path d="M6 8h.01M10 8h.01M14 8h.01" />
-              </svg>
-            </div>
-            <span className="text-sm font-medium text-slate-400">Containers</span>
+            {/* Containers — only shown for Docker-capable hosts */}
+            {!hideContainers && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 p-5 backdrop-blur-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-amber/10">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 12.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h7.5" />
+                      <path d="M18 14v4h4M18 18l4 4" />
+                      <path d="M6 8h.01M10 8h.01M14 8h.01" />
+                    </svg>
+                  </div>
+                  <span className="text-sm font-medium text-slate-400">Containers</span>
+                </div>
+                <div className="mt-3 text-3xl font-bold text-white">{latestSnap?.containers?.length ?? 0}</div>
+                <div className="mt-1 text-xs text-slate-500">Docker monitoring enabled</div>
+              </motion.div>
+            )}
           </div>
-          <div className="mt-3 text-3xl font-bold text-white">{latestSnap?.containers?.length ?? 0}</div>
-          <div className="mt-1 text-xs text-slate-500">{monitorDocker ? "Docker monitoring enabled" : "Docker monitoring disabled"}</div>
-        </motion.div>
-      </div>
+        );
+      })()}
 
       {/* HTTP Endpoints Section */}
       <div className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 backdrop-blur-sm">
@@ -834,7 +843,7 @@ export default function ServerDetailPage() {
         )}
       </div>
 
-      {!detail?.latestReport && !isSSH ? (
+      {!detail?.latestReport && !isSSH && !isAgentSystemd ? (
         <div className="rounded-xl border border-neon-amber/30 bg-neon-amber/10 p-5 backdrop-blur-sm">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neon-amber/20 text-neon-amber">
@@ -845,7 +854,7 @@ export default function ServerDetailPage() {
             <div>
               <div className="font-medium text-neon-amber">No realtime stats yet</div>
               <div className="mt-1 text-sm text-slate-400">
-                CPU/memory/disk/docker stats come from the agent. Go to{" "}
+                CPU/memory/disk stats come from the agent. Go to{" "}
                 <Link to="/servers/manage" className="font-medium text-neon-cyan hover:underline">Manage Servers</Link>{" "}
                 to generate an agent key, then run the agent on this server.
               </div>
@@ -969,8 +978,10 @@ export default function ServerDetailPage() {
         )}
       </div>
 
-      {/* Docker Containers or Processes */}
-      {monitorDocker ? (
+      {/* Docker Containers or Processes
+          SSH hosts and agent_systemd-without-Docker hosts skip the Docker branch entirely
+          and always render the Processes table as the primary activity surface. */}
+      {monitorDocker && !isSSH ? (
         <div className="rounded-xl border border-slate-700/50 bg-obsidian-800/40 backdrop-blur-sm">
           <div className="border-b border-slate-700/50 px-5 py-4">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -1026,7 +1037,13 @@ export default function ServerDetailPage() {
           <div className="border-b border-slate-700/50 px-5 py-4">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div className="font-medium text-white">Top Processes</div>
-              <div className="text-sm text-slate-400">Top 5 by CPU</div>
+              <div className="text-sm text-slate-400">
+                {isSSH
+                  ? "SSH-polled server — container monitoring not available"
+                  : isAgentSystemd && !monitorDocker
+                  ? "Agent running without Docker scope — container monitoring disabled"
+                  : "Top 5 by CPU"}
+              </div>
             </div>
           </div>
           {(() => {
