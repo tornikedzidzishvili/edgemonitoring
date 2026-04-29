@@ -3,3 +3,4 @@
 - [Dead Code — SMTP Test Stub](project_smtp_test_dead_code.md) — /settings/smtp/test is a stub returning "would be sent"; real endpoint is /settings/alerts/test
 - [SSE Auth Bug — Reconnecting Badge](project_sse_auth_bug.md) — P1: EventSource can't send Bearer headers; fix is SSE ticket pattern (POST stream-ticket, ?ticket= query param)
 - [CyberPanel + SSH Monitoring Epic](project_cyberpanel_ssh_epic.md) — EMS-EPIC-001: 14 stories, 3 phases, 10-wave dispatch plan; schema-first constraint on Waves 1 and 4
+- [Smart Agent Install Initiative](project_smart_agent_install_initiative.md) — EMS-DETECT-01–04: auto-stack detection at install; no schema change; 3-wave dispatch; legacy Docker falls back to agent_systemd

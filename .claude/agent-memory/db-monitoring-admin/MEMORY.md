@@ -3,5 +3,6 @@
 - [Schema audit findings — April 2026](project_schema_audit.md) — missing apiKeyHash index, WebApp cascade gap, N+1 patterns, unbounded Server query
 - [Prisma 7 migration config](project_prisma7_config.md) — prisma.config.ts required for migrate; datasource url removed from schema.prisma in Prisma 7
 - [BrandingSettings model — EMS-5](project_branding_settings.md) — singleton table for logo/favicon paths + platform name; permanent config, never in retention
-- [MonitoringMode and ReportSource enums — EMS-15](project_monitoring_mode_enums.md) — Wave 1 schema discriminator for SSH/CyberPanel; migration 20260426192811
+- [MonitoringMode and ReportSource enums — EMS-15+38](project_monitoring_mode_enums.md) — agent_systemd added (EMS-38); migration 20260427132430 is intentionally empty SQL (SQLite TEXT enum)
 - [CyberPanel SharedHostingServer schema extension — EMS-21](project_cyberpanel_schema_ext.md) — SSH fields + serviceStatus + SshKey back-relation; migration 20260426194718
+- [sshHost field on SharedHostingServer — EMS-31](project_ssh_host_field.md) — nullable sshHost fixes missing-ssh-config; migration 20260426205034

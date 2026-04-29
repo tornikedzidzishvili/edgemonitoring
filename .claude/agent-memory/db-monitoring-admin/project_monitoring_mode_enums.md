@@ -1,16 +1,18 @@
 ---
-name: MonitoringMode and ReportSource enums — EMS-15
-description: Wave 1 schema discriminator for agentless SSH + CyberPanel monitoring paths added in migration 20260426192811
+name: MonitoringMode and ReportSource enums — EMS-15 + EMS-38
+description: MonitoringMode enum values and migration history; updated with agent_systemd (EMS-38) in migration 20260427132430
 type: project
 ---
 
-Two enums added to schema.prisma for the "Agentless SSH + CyberPanel" epic (EMS-14).
+Two enums in schema.prisma for monitoring-path discrimination.
 
-`MonitoringMode` enum on `Server.monitoringMode` (default: `agent`): values `agent | ssh | cyberpanel`.
+`MonitoringMode` enum on `Server.monitoringMode` (default: `agent`): values `agent | agent_systemd | ssh | cyberpanel`.
 `ReportSource` enum on `ServerReport.source` (default: `agent`): values `agent | ssh`.
 
-Migration: `20260426192811_add_monitoring_mode_and_report_source`
+Migrations:
+- `20260426192811_add_monitoring_mode_and_report_source` — initial enum columns (EMS-15)
+- `20260427132430_add_agent_systemd_monitoring_mode` — added `agent_systemd` value (EMS-38)
 
-**Why:** Every Wave 2 story (scheduler, CRUD API, UI mode selector, dashboards, alerting) compiles against these enum types. Nothing in Wave 2 can ship until this migration is deployed.
+**Why:** SQLite stores enum values as TEXT with no CHECK constraint. Adding a new enum value requires only a Prisma client regeneration — no DDL changes. The migration SQL is intentionally empty ("-- This is an empty migration.") and is registered purely for audit trail continuity.
 
-**How to apply:** When adding SSH polling or CyberPanel ingestion code, set `monitoringMode` on Server rows and `source` on ServerReport rows accordingly. SQLite stores enums as TEXT with a DB-level default so existing rows already have `agent` without a backfill script. `dataRetention.ts` confirmed unaffected — it filters by `reportedAt`/`checkedAt` only and has no dependency on either new column.
+**How to apply:** `agent_systemd` is the push-based systemd agent path for hosts that cannot run Docker (CyberPanel/Plesk/LiteSpeed). When ingesting reports from systemd agents, set `monitoringMode = agent_systemd` on the Server row. `dataRetention.ts` confirmed unaffected — filters on time columns only, no enum dependency.

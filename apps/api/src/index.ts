@@ -8,9 +8,14 @@ import { getAgentKeyHash } from "./auth.js";
 import { generateApiKey, hashApiKey } from "./security.js";
 import { startUptimeScheduler, startDomainScheduler, startSharedHostingSyncScheduler } from "./scheduler.js";
 import { getSslStatus } from "./domainChecker.js";
-import { probeOverSsh } from "./sshProbe.js";
+import { probeOverSsh, openSshSession } from "./sshProbe.js";
 import { decryptString, encryptString } from "./cryptoBox.js";
 import { installAgentOverSsh } from "./agentInstaller.js";
+import {
+  detectHostStack,
+  resolveMonitoringMode,
+  HostStackDetectTimeoutError,
+} from "./services/hostStackDetector.js";
 import { authRoutes } from "./routes/auth.js";
 import { usersRoutes } from "./routes/users.js";
 import { settingsRoutes } from "./routes/settings.js";
@@ -1361,6 +1366,144 @@ app.post("/admin/servers/:id/test-ssh", async (req, reply) => {
   }
 });
 
+// Admin: detect host stack via SSH (EMS-47)
+//
+// Route classification: POST /admin/servers/:id/detect-stack
+// The "/admin/*" prefix is classified as admin by routeGuard.ts — no
+// additional preHandler is required. The route is also covered by the default
+// rate-limit bucket (100 req/min per IP) applied to all unclassified paths.
+//
+// Response: plain JSON (not streaming). Pre-flight errors are 4xx; SSH or
+// detection failures are 502/504 with sanitized error strings only — raw SSH
+// messages, probe output, and key material are never forwarded to the caller.
+app.post("/admin/servers/:id/detect-stack", async (req, reply) => {
+  const params = z.object({ id: z.string().min(1) }).parse(req.params);
+
+  const startedAt = Date.now();
+
+  // --- 1. Resolve server ---
+  const server = await prisma.server.findUnique({
+    where: { id: params.id },
+    include: { sshKey: true },
+  });
+  if (!server) {
+    return reply.status(404).send({ error: "server-not-found" });
+  }
+
+  // --- 2. Pre-flight checks ---
+  if (!server.ip) {
+    return reply.status(400).send({ error: "missing-server-ip" });
+  }
+  if (!server.sshKeyId || !server.sshKey) {
+    return reply.status(400).send({ error: "missing-ssh-key" });
+  }
+
+  const sshKey = server.sshKey;
+
+  // Prefer server-level username override, fall back to key default.
+  const username = server.sshUser ?? sshKey.username ?? null;
+  if (!username) {
+    return reply.status(400).send({ error: "missing-ssh-username" });
+  }
+
+  const port = server.sshPort ?? sshKey.port ?? 22;
+
+  // --- 3. Decrypt credentials (plaintext scoped to this block only) ---
+  const privateKey = decryptString(
+    { enc: sshKey.privateKeyEnc, iv: sshKey.privateKeyIv, tag: sshKey.privateKeyTag },
+    env.SSH_KEY_MASTER_SECRET
+  );
+
+  let passphrase: string | undefined;
+  if (sshKey.passphraseEnc && sshKey.passphraseIv && sshKey.passphraseTag) {
+    passphrase = decryptString(
+      { enc: sshKey.passphraseEnc, iv: sshKey.passphraseIv, tag: sshKey.passphraseTag },
+      env.SSH_KEY_MASTER_SECRET
+    );
+  }
+
+  // --- 4. Open SSH session, run detection, always close in finally ---
+  let session: Awaited<ReturnType<typeof openSshSession>> | undefined;
+
+  try {
+    // SSH connection errors are caught below and mapped to 502.
+    try {
+      session = await openSshSession({
+        host: server.ip,
+        port,
+        username,
+        privateKey,
+        passphrase,
+        // Give the connection itself a generous headroom; the detector has its
+        // own 8 s internal budget for the probes once the session is open.
+        timeoutMs: 15_000,
+      });
+    } catch (connErr: unknown) {
+      // Sanitize: map known SSH connect errors to a short category label.
+      // Never log or forward raw error messages — they may contain key fragments
+      // or host banners with internal details.
+      const msg = connErr instanceof Error ? connErr.message : "";
+      const code =
+        connErr != null &&
+        typeof connErr === "object" &&
+        "code" in connErr &&
+        typeof (connErr as Record<string, unknown>).code === "string"
+          ? ((connErr as Record<string, unknown>).code as string)
+          : "";
+
+      let errorCategory: string;
+      if (
+        msg.toLowerCase().includes("all configured authentication methods failed") ||
+        msg.toLowerCase().includes("authentication failed") ||
+        msg.toLowerCase().includes("publickey") ||
+        code === "ERR_AUTHENTICATION"
+      ) {
+        errorCategory = "auth-failure";
+      } else if (
+        code === "ECONNREFUSED" ||
+        code === "EHOSTUNREACH" ||
+        code === "ENETUNREACH" ||
+        msg.toLowerCase().includes("connection refused") ||
+        msg.toLowerCase().includes("host unreachable")
+      ) {
+        errorCategory = "host-unreachable";
+      } else {
+        errorCategory = "connect-error";
+      }
+
+      console.error(
+        `[detect-stack] serverId=${params.id} error="${errorCategory}" elapsedMs=${Date.now() - startedAt}`
+      );
+      return reply.status(502).send({ error: "ssh-connect-failed" });
+    }
+
+    // Session is open — run all probes.
+    const profile = await detectHostStack(session);
+    const recommendedMode = resolveMonitoringMode(profile);
+
+    return reply.send({ profile, recommendedMode });
+  } catch (err: unknown) {
+    if (err instanceof HostStackDetectTimeoutError) {
+      console.error(
+        `[detect-stack] serverId=${params.id} error="detection-timeout" elapsedMs=${Date.now() - startedAt}`
+      );
+      return reply.status(504).send({ error: "detection-timeout" });
+    }
+
+    // Any other unexpected error from the detector — log category only.
+    const category = err instanceof Error ? err.constructor.name || "Error" : "UnknownError";
+    console.error(
+      `[detect-stack] serverId=${params.id} error="detection-failed" category="${category}" elapsedMs=${Date.now() - startedAt}`
+    );
+    return reply.status(502).send({ error: "detection-failed" });
+  } finally {
+    // SSH session must be closed on every code path — success, timeout, or error.
+    if (session !== undefined) {
+      session.close();
+    }
+  }
+});
+
 // Admin: install agent on a server via SSH
 //
 // Route classification: POST /admin/servers/:id/install-agent
@@ -1373,6 +1516,12 @@ app.post("/admin/servers/:id/test-ssh", async (req, reply) => {
 // JSON response with a 4xx status code BEFORE streaming begins.
 app.post("/admin/servers/:id/install-agent", async (req, reply) => {
   const params = z.object({ id: z.string().min(1) }).parse(req.params);
+
+  // EMS-48: optional monitoringMode in request body. Tolerant of missing/empty
+  // body (current frontend sends `{}`) — the field is always optional.
+  const body = z.object({
+    monitoringMode: z.enum(["agent", "agent_systemd"]).optional(),
+  }).parse(req.body ?? {});
 
   // --- 1. Look up server ---
   const server = await prisma.server.findUnique({
@@ -1398,6 +1547,25 @@ app.post("/admin/servers/:id/install-agent", async (req, reply) => {
   }
 
   const port = server.sshPort ?? sshKey.port ?? 22;
+
+  // --- 2b. Resolve effective monitoring mode (EMS-48) ---
+  // The body's monitoringMode takes precedence over the persisted DB value.
+  // If neither the body nor the DB provides an agent-installable mode, reject
+  // before streaming — ssh/cyberpanel servers are not managed by this installer.
+  const resolvedMode: "agent" | "agent_systemd" | null = (() => {
+    if (body.monitoringMode) return body.monitoringMode;
+    if (server.monitoringMode === "agent" || server.monitoringMode === "agent_systemd") {
+      return server.monitoringMode;
+    }
+    return null;
+  })();
+
+  if (!resolvedMode) {
+    // Server is ssh/cyberpanel and no body override was provided. The agent
+    // installer cannot manage these modes — the operator must pass an explicit
+    // monitoringMode in the request body.
+    throw app.httpErrors.badRequest("invalid-monitoring-mode");
+  }
 
   // --- 3. Decrypt private key + passphrase ---
   const privateKey = decryptString(
@@ -1442,15 +1610,9 @@ app.post("/admin/servers/:id/install-agent", async (req, reply) => {
     data: { apiKeyHash: newApiKeyHash }
   });
 
-  // --- 5b. Resolve monitoring mode for installer ---
-  // Map server's monitoringMode to the installer's accepted union.
-  // "agent" and "agent_systemd" map directly; any other mode (ssh, cyberpanel)
-  // is treated as "agent" since those modes don't use this installer path.
-  const installerMode: "agent" | "agent_systemd" =
-    server.monitoringMode === "agent_systemd" ? "agent_systemd" : "agent";
-
   // --- 6 + 7 + 8 + 9 + 10 + 11 + 12. SSH install (all phases handled inside) ---
-  await installAgentOverSsh(
+  // resolvedMode is the effective mode for this install (body ?? DB, validated above).
+  const installResult = await installAgentOverSsh(
     {
       host: server.ip,
       port,
@@ -1460,11 +1622,34 @@ app.post("/admin/servers/:id/install-agent", async (req, reply) => {
       apiUrl: env.PUBLIC_API_URL,
       apiKey: plainApiKey,
       serverName: server.name,
-      monitoringMode: installerMode,
+      monitoringMode: resolvedMode,
       timeoutMs: 5 * 60 * 1000,
     },
     emit
   );
+
+  // --- 13. Persist resolved mode on success (EMS-48) ---
+  // Only write when the installer exited cleanly. The write happens BEFORE
+  // reply.raw.end() so the next page-reload sees the updated mode immediately.
+  // A Prisma failure here does NOT mask the install result — it is logged and
+  // emitted as a warning NDJSON line so the operator is informed, but the
+  // stream still closes normally.
+  if (installResult.ok) {
+    try {
+      await prisma.server.update({
+        where: { id: server.id },
+        data: { monitoringMode: resolvedMode },
+      });
+    } catch (persistErr) {
+      const msg = persistErr instanceof Error ? persistErr.message : "unknown-error";
+      console.error(`[install-agent] failed to persist monitoringMode for server ${server.id}: ${msg}`);
+      emit(JSON.stringify({
+        type: "status",
+        phase: "done",
+        message: `Warning: agent installed but failed to persist monitoring mode — ${msg}`,
+      }));
+    }
+  }
 
   reply.raw.end();
 });
