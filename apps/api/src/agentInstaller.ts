@@ -17,7 +17,7 @@ import { request } from "undici";
 import { Client } from "ssh2";
 
 const AGENT_REPO = "tornikedzidzishvili/edgemonitoringagent";
-const FALLBACK_TAG = "v0.2.2";
+const FALLBACK_TAG = "v0.2.3";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 interface CacheEntry { tag: string; expiresAt: number }
