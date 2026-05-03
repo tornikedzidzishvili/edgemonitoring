@@ -1,0 +1,30 @@
+# EMS-54: weekly Docker prune for the Edge Monitoring host.
+#
+# Why oneshot + Type=oneshot:
+# We want a deterministic single execution per timer fire that journald logs
+# completely. No long-running daemon, no restart-on-failure desired.
+#
+# Why not 'docker system prune -a':
+# 'system prune' will also wipe build cache and dangling networks, which is
+# what we want; but the explicit two-step form below makes it crystal clear
+# that we are NOT touching volumes (-v / --volumes is forbidden by EMS-54
+# hard constraints — that's where api_data lives).
+[Unit]
+Description=Edge Monitoring weekly Docker image + builder prune (EMS-54)
+Documentation=https://docs.docker.com/config/pruning/
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# -af = remove ALL unused images (including untagged) without prompting.
+# Builder prune removes build cache older than 168h (= 7 days) so the cache
+# stays warm enough to speed up builds but cannot grow unbounded.
+# IMPORTANT: no -v / --volumes anywhere — Edge Monitoring's api_data volume
+# holds the production SQLite DB and must never be pruned.
+ExecStart=/usr/bin/docker image prune -af
+ExecStart=/usr/bin/docker builder prune -af --filter until=168h
+# Be a good citizen: don't blow up CPU/IO if the timer fires during a deploy.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

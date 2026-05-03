@@ -1,3 +1,12 @@
+## EMS-54: keep dev parity with prod log rotation. Local dev rarely fills disk,
+## but matching the rotation config means we exercise the same logging behaviour
+## under docker compose locally that we ship in production.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   api:
     build:
@@ -21,6 +30,7 @@ services:
     volumes:
       - api_data:/data
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4000/health"]
       interval: 30s
@@ -39,6 +49,7 @@ services:
     environment:
       - VITE_API_BASE_URL=http://localhost:4000
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       api:
         condition: service_healthy

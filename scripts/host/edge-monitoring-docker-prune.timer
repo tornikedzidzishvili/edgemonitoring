@@ -1,0 +1,18 @@
+# EMS-54: schedule the weekly Docker prune.
+#
+# Sundays at 03:30 UTC: low-traffic window for monitoring.edge.ge and well
+# clear of the certbot renewal cron (00:00 / 12:00 UTC). Persistent=true
+# means a missed run (host was off / rebooting at the scheduled time) fires
+# at next boot rather than silently skipping a week.
+[Unit]
+Description=Run Edge Monitoring Docker prune weekly (EMS-54)
+Requires=edge-monitoring-docker-prune.service
+
+[Timer]
+OnCalendar=Sun *-*-* 03:30:00 UTC
+Persistent=true
+RandomizedDelaySec=15min
+Unit=edge-monitoring-docker-prune.service
+
+[Install]
+WantedBy=timers.target

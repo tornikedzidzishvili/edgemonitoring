@@ -1,5 +1,6 @@
 - [Data Retention Service](project_retention_service.md) — batch-delete retention for all 4 high-volume tables; wiring note for index.ts
 - [SQLite WAL and performance pragmas](project_sqlite_pragmas.md) — WAL mode + busy_timeout + cache_size applied in db.ts at import time
+- [SQLite auto_vacuum EMS-55](project_sqlite_auto_vacuum.md) — NONE→INCREMENTAL flip + one-time VACUUM on 2026-05-03; backup at /opt/edge-monitoring/backups/
 - [Schema audit findings — April 2026](project_schema_audit.md) — missing apiKeyHash index, WebApp cascade gap, N+1 patterns, unbounded Server query
 - [Prisma 7 migration config](project_prisma7_config.md) — prisma.config.ts required for migrate; datasource url removed from schema.prisma in Prisma 7
 - [BrandingSettings model — EMS-5](project_branding_settings.md) — singleton table for logo/favicon paths + platform name; permanent config, never in retention

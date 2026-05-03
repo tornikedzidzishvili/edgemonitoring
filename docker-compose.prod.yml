@@ -1,3 +1,14 @@
+## EMS-54 (post-incident hardening for EMS-53):
+## Every long-running service has json-file log rotation capped at 10MB x 3 files = 30MB
+## per container. Without this cap Docker's default driver lets per-container logs grow
+## unbounded — which is one of the contributors that filled /var/lib/docker on prod and
+## caused the 2026-05-03 outage. Keep these blocks in sync with docker-compose.yml.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   api:
     image: ghcr.io/tornikedzidzishvili/edge-monitoring-api:${IMAGE_TAG:-latest}
@@ -20,6 +31,7 @@ services:
     volumes:
       - api_data:/data
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4000/health"]
       interval: 30s
@@ -30,6 +42,7 @@ services:
   web:
     image: ghcr.io/tornikedzidzishvili/edge-monitoring-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       api:
         condition: service_healthy
@@ -50,12 +63,14 @@ services:
       - api
       - web
     restart: unless-stopped
+    logging: *default-logging
 
   certbot:
     image: certbot/certbot
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot_www:/var/www/certbot
+    logging: *default-logging
 
 volumes:
   api_data:

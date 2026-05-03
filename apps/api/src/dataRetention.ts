@@ -296,8 +296,12 @@ async function runRetention(
   }
 
   // ── Incremental vacuum (reclaim free pages in small batches) ─────────────
-  // Runs 500 pages per invocation to stay under the write-lock budget.
-  // Only effective when auto_vacuum = INCREMENTAL is set (see db.ts).
+  // EMS-55: without this, SQLite marks deleted rows as free pages internally
+  // but never returns that space to the OS, causing the .db file to grow
+  // unboundedly even after faithful retention deletes (root cause of P1 disk
+  // fill on 2026-05-03).  Runs 500 pages per invocation to stay under the
+  // write-lock budget.  Only effective when auto_vacuum = INCREMENTAL is set
+  // (see db.ts).
   try {
     await prisma.$executeRawUnsafe("PRAGMA incremental_vacuum(500);");
     await prisma.$executeRawUnsafe("PRAGMA optimize;");

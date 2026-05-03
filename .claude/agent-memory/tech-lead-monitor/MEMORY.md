@@ -1,6 +1,8 @@
-- [Prod SSH access constraint](project_prod_ssh_access.md) — no SSH auth on 46.224.152.2; produce copy-pasteable commands for user instead of delegating to devops
+- [Prod SSH access — root via id_ed25519](project_prod_ssh_access.md) — root@46.224.152.2 works with ~/.ssh/id_ed25519; run prod ops directly, don't paste commands at user
 - [SQLite auto_vacuum state on prod DB](project_sqlite_auto_vacuum.md) — prod DB is auto_vacuum=NONE; one-time VACUUM with PRAGMA flip is the fix, not a code change
 - [Jira workspace + project for EMS](project_jira_workspace.md) — edgedigital.atlassian.net, project EMS, Nova bot (nova@edge.ge), human contact tornike@edge.ge
 - [Agent tools allowlist must include mcp__*](feedback_mcp_tools_allowlist.md) — MCP servers connected globally are still filtered by agent frontmatter tools allowlist; add `mcp__*` and restart
 - [HARD RULE: Jira workspace locked to edgedigital](feedback_jira_scope_lock.md) — never write to any Atlassian workspace other than edgedigital.atlassian.net; tbchq is a different org; verify cloudId + user email before every write
 - [Jira team-managed REST limits](feedback_jira_team_managed_rest_limits.md) — board column config is UI-only for team-managed projects; statuses can be created via REST but wiring into board layout cannot
+- [HARD RULE: Disk-full outages must be prevented](feedback_disk_full_must_not_recur.md) — user has flagged this twice; 30d DB retention is not enough, also need log rotation + VACUUM + disk alert
+- [HARD RULE: Never wipe servers/creds/settings](feedback_no_data_wipe.md) — api_data volume + .db + .env are sacred; never use `-v`/`--volumes` flags; backup .db before any DB op

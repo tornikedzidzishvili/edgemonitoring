@@ -30,7 +30,7 @@ void prisma
   .then(() => prisma.$executeRawUnsafe("PRAGMA synchronous = NORMAL;"))
   .then(() => prisma.$executeRawUnsafe("PRAGMA busy_timeout = 5000;"))
   .then(() => prisma.$executeRawUnsafe("PRAGMA cache_size = -20000;"))
-  .then(() => prisma.$executeRawUnsafe("PRAGMA auto_vacuum = INCREMENTAL;"))
+  .then(() => prisma.$executeRawUnsafe("PRAGMA auto_vacuum = INCREMENTAL;")) // EMS-55: enables incremental_vacuum() in retention job to return freed pages to the OS; only takes effect on a new DB or after a one-time VACUUM on existing DBs
   .then(() => prisma.$executeRawUnsafe("PRAGMA journal_size_limit = 67108864;"))
   .then(() => prisma.$executeRawUnsafe("PRAGMA temp_store = MEMORY;"))
   .then(() => prisma.$executeRawUnsafe("PRAGMA optimize;"))
